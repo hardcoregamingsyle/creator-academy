@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Change this to your project's name before deploying (Cloudflare Pages/Workers project name).
+  "name": "creator-academy",
+  "compatibility_date": "2026-09-24",
+  // Required for Next.js (via OpenNext): Node.js API compatibility in the Workers runtime.
+  "compatibility_flags": ["nodejs_compat"],
+  "main": ".open-next/worker.js",
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  }
+  // Environment variables (DATABASE_URL, RAZORPAY_*, SMTP_*, ADMIN_PASSWORD, SESSION_SECRET, ...)
+  // are NOT set here. Set them as Cloudflare Pages/Workers secrets/variables instead — see the
+  // "Deploying to Cloudflare Pages" section in README.md.
+}
