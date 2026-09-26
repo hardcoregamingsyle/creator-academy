@@ -178,7 +178,7 @@ export function FeedbackForm({
               type="checkbox"
               checked={consentPublic}
               onChange={(e) => setConsentPublic(e.target.checked)}
-              className="mt-0.5 size-4 shrink-0 accent-[#C2370F]"
+              className="mt-0.5 size-4 shrink-0 accent-[#6D28D9]"
               disabled={busy}
             />
             <span>

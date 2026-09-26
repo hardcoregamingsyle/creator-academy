@@ -149,52 +149,78 @@ if the host has a **persistent disk** mounted at `data/`; otherwise use Turso.
 > paused"). To run a public demo without real payments set `ALLOW_DEMO_PAYMENTS=true` — never on
 > the real launch.
 
-### Cloudflare (Workers, via OpenNext) — the modern "Pages" for a full Next.js app
+### Cloudflare — deployed as a Worker, via GitHub Actions
 
-Cloudflare has merged Pages and Workers: the current, supported way to deploy a full
-server-rendered Next.js app (not just static files) is a **Worker with static assets**, built with
-the [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare) adapter — already wired up in
-this project (`open-next.config.ts`, `wrangler.jsonc`, and the `cf:*` npm scripts). It's been
-build-tested end-to-end (`npm run cf:build` + `npx wrangler deploy --dry-run`) and produces a valid
-Worker. **Requirements specific to this platform** (Workers has no filesystem and isn't Node.js):
+> ⚠️ **Not Cloudflare Pages.** Pages' Next.js adapter (`@cloudflare/next-on-pages`) is deprecated
+> and its repo was archived in September 2025 — it only ever supported Next.js 13–14 and the
+> restrictive Edge runtime. Cloudflare's own current guidance is to deploy full Next.js apps as a
+> **Worker** instead, via the [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare)
+> adapter, which is what this project uses (`open-next.config.ts`, `wrangler.jsonc`, `cf:*` npm
+> scripts). A Cloudflare "Worker" today *is* the thing you'd want from "Pages" for a real, dynamic
+> site — same free tier, same custom domains, just the currently-supported product. It's been
+> build-tested end-to-end (`npm run cf:build` + `npx wrangler deploy --dry-run`) and produces a
+> valid Worker.
+
+**This repo deploys itself automatically** via
+[`.github/workflows/deploy-cloudflare.yml`](.github/workflows/deploy-cloudflare.yml): every push to
+`main` builds the app and runs `wrangler deploy`. One-time setup (~5 minutes):
+
+1. **Create a Cloudflare API token**: Cloudflare dashboard → click your profile icon (top right) →
+   **My Profile** → **API Tokens** → **Create Token** → use the **"Edit Cloudflare Workers"**
+   template (or a custom token with **Account → Workers Scripts → Edit** permission) → scope it to
+   your account → **Continue to summary** → **Create Token** → copy it (shown once).
+2. **Add it to GitHub**: this repo → **Settings** → **Secrets and variables** → **Actions** →
+   **New repository secret** → name `CLOUDFLARE_API_TOKEN`, paste the token.
+   - If the token page shows an Account ID and your Cloudflare account has more than one account
+     on it, also add a second secret `CLOUDFLARE_ACCOUNT_ID` with that value. If you only have one
+     Cloudflare account, you can skip this — wrangler infers it automatically.
+3. *(Optional)* Add repository **Variables** (same Settings page, "Variables" tab — not secrets,
+   these are non-sensitive) for anything you want baked into the public site at build time:
+   `SITE_URL`, `NEXT_PUBLIC_CONTACT_EMAIL`, `NEXT_PUBLIC_LEGAL_NAME`, `NEXT_PUBLIC_LEGAL_ADDRESS`,
+   `NEXT_PUBLIC_JURISDICTION`. Skipping this just means the code's placeholder defaults show up
+   instead — fine for a first deploy, fix before real launch.
+4. **Set the app's runtime secrets on the Worker itself** — these are NOT part of the GitHub repo
+   or the build; they're configured once directly on Cloudflare and persist across every future
+   deploy. Easiest from a machine with the repo cloned:
+   ```bash
+   npx wrangler login                 # once, opens a browser to authorize
+   wrangler secret put DATABASE_URL           # libsql://… (Turso — see below, required)
+   wrangler secret put DATABASE_AUTH_TOKEN
+   wrangler secret put ADMIN_PASSWORD
+   wrangler secret put SESSION_SECRET
+   # optional as you enable them: RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET /
+   # SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / EMAIL_FROM
+   ```
+   Or set them in the dashboard instead, once the Worker exists after its first deploy: **Workers &
+   Pages** → your worker (named from `wrangler.jsonc`'s `name` field, `creator-academy` by default —
+   rename it there before the first deploy if you want a different name) → **Settings** →
+   **Variables and Secrets**.
+5. **Push to `main`** (or run the workflow manually from the **Actions** tab). Watch it run under
+   the **Actions** tab; when it's green, the Worker is live at
+   `https://<name-from-wrangler.jsonc>.<your-subdomain>.workers.dev` (find the exact URL in the
+   Cloudflare dashboard, or in the workflow's deploy step output).
+6. Attach a custom domain any time from the Worker's **Settings** → **Domains & Routes**.
+
+**Platform requirements to know about** (Workers has no filesystem and isn't Node.js):
 
 - **Database must be Turso**, not a local file — `DATABASE_URL=libsql://…` + `DATABASE_AUTH_TOKEN`.
   `@libsql/client` auto-switches to its Workers-compatible build for `libsql://`/`https://` URLs.
 - **Email (SMTP via nodemailer) is not guaranteed to work.** Workers doesn't support raw outbound
   TCP the way Node does, so nodemailer's SMTP connection may fail at runtime. The app degrades
   gracefully — a failed send is logged as `failed` in `/admin/emails` instead of crashing — but you
-  won't get real emails out. If you deploy here for real, swap `src/lib/email.ts` for an HTTP-based
-  provider (Resend, Postmark, Brevo's API, etc.) instead of SMTP. This is the one piece not yet
-  adapted for Workers.
-- **Build it on Linux/macOS or via Cloudflare's own CI, not this Windows machine for the real
-  deploy.** OpenNext explicitly warns it isn't fully reliable on Windows; it built successfully
-  here, but Cloudflare's Git-connected build (Linux-based) is the recommended path.
+  won't get real emails out. If you need real email on Workers, swap `src/lib/email.ts` for an
+  HTTP-based provider (Resend, Postmark, Brevo's API, etc.) instead of SMTP.
 
-**Deploy by connecting the GitHub repo (recommended):**
-
-1. Cloudflare dashboard → **Workers & Pages** → **Create** → **Import a Git repository**, pick this
-   repo.
-2. Build command: `npm run cf:build` — Build output / deploy config: leave as detected (it reads
-   `wrangler.jsonc`).
-3. Add environment variables/secrets in the dashboard (Settings → Variables): everything from
-   `.env.example` (`DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `ADMIN_PASSWORD`, `SESSION_SECRET`,
-   `RAZORPAY_*`, `SITE_URL`, etc.). Mark secrets (tokens/passwords) as **encrypted**.
-4. Rename the project in `wrangler.jsonc` (`name` field) before the first deploy.
-
-**Or deploy manually from a machine with the repo checked out:**
+**Manual deploy** (no GitHub Actions) from a machine with the repo checked out and secrets already
+set as above:
 
 ```bash
-npx wrangler login          # once, opens a browser to authorize
-wrangler secret put DATABASE_URL
-wrangler secret put DATABASE_AUTH_TOKEN
-wrangler secret put ADMIN_PASSWORD
-wrangler secret put SESSION_SECRET
-# ...repeat for RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET / SMTP_* as needed
-npm run cf:deploy           # builds (opennextjs-cloudflare build) then deploys (wrangler deploy)
+npm run cf:deploy   # builds (opennextjs-cloudflare build) then deploys (wrangler deploy)
 ```
 
-`npm run cf:preview` builds and runs the Worker locally (via `wrangler dev`-style preview) so you
-can sanity-check it before deploying.
+`npm run cf:preview` builds and runs the Worker locally so you can sanity-check it before deploying.
+If you already created a Cloudflare **Pages** project for this repo, it won't work (see the warning
+above) — delete it or just leave it unused; the Worker created by this workflow is independent of it.
 
 ---
 

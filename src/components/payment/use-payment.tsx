@@ -119,7 +119,7 @@ export function usePayment() {
         description: start.description,
         order_id: start.orderId,
         prefill: start.prefill,
-        theme: { color: "#C2370F" },
+        theme: { color: "#6D28D9" },
         modal: {
           ondismiss: () => {
             setState("idle");

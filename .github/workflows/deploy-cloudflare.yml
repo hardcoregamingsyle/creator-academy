@@ -1,0 +1,55 @@
+name: Deploy to Cloudflare Workers
+
+# Builds this Next.js app with the OpenNext Cloudflare adapter and deploys it
+# as a Cloudflare Worker on every push to main. See README.md → "Deploying →
+# Cloudflare" for the one-time setup this workflow needs (an API token).
+#
+# This workflow only ships the CODE. The app's own runtime configuration
+# (DATABASE_URL, ADMIN_PASSWORD, RAZORPAY_*, SMTP_*, ...) lives separately as
+# Cloudflare Worker secrets/variables (set once via `wrangler secret put` or
+# the Cloudflare dashboard) and is NOT part of this workflow or this repo.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {} # allows a manual "Run workflow" from the Actions tab
+
+concurrency:
+  group: deploy-cloudflare
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for Cloudflare
+        run: npm run cf:build
+        env:
+          # Baked into the client bundle at build time — public, non-secret
+          # business details. Set these as repository *Variables* (not
+          # secrets) under Settings → Secrets and variables → Actions → Variables
+          # if you want them shown correctly; otherwise the code's defaults
+          # (e.g. "hello@example.com") are used.
+          SITE_URL: ${{ vars.SITE_URL }}
+          NEXT_PUBLIC_CONTACT_EMAIL: ${{ vars.NEXT_PUBLIC_CONTACT_EMAIL }}
+          NEXT_PUBLIC_LEGAL_NAME: ${{ vars.NEXT_PUBLIC_LEGAL_NAME }}
+          NEXT_PUBLIC_LEGAL_ADDRESS: ${{ vars.NEXT_PUBLIC_LEGAL_ADDRESS }}
+          NEXT_PUBLIC_JURISDICTION: ${{ vars.NEXT_PUBLIC_JURISDICTION }}
+
+      - name: Deploy
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

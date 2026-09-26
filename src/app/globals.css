@@ -1,40 +1,42 @@
 @import "tailwindcss";
 
 /*
- * Design tokens. Warm "paper" background, near-black ink, and a single
- * recording-light orange accent. Track colours (blue/green) are only used for
- * the class-structure timeline graphic.
+ * Design tokens. White/near-white background, purple-black ink, and a violet
+ * brand accent — with yellow and red kept as small, purposeful accents (never
+ * dominant). Track colours (a/b/c) are only used for the class-structure
+ * timeline graphic: indigo → violet → gold, so it stays inside the palette
+ * instead of borrowing an off-brand blue/green.
  */
 @theme {
-  --color-paper: #f6f4ef;
+  --color-paper: #f8f6fc;
   --color-surface: #ffffff;
-  --color-sunken: #eeebe4;
-  --color-ink: #141414;
-  --color-ink-soft: #262626;
-  --color-muted: #5e5a55;
-  --color-subtle: #8a857e;
-  --color-line: #e3ded5;
-  --color-line-strong: #cfc8bc;
+  --color-sunken: #efe9f7;
+  --color-ink: #160f20;
+  --color-ink-soft: #2b2137;
+  --color-muted: #685f78;
+  --color-subtle: #9a90ab;
+  --color-line: #e4dcf1;
+  --color-line-strong: #cebfe3;
 
-  --color-accent: #e8431a;
-  --color-accent-strong: #c2370f;
-  --color-accent-soft: #fde9e1;
-  --color-marker: #ffd84a;
+  --color-accent: #8b5cf6;
+  --color-accent-strong: #6d28d9;
+  --color-accent-soft: #efe5fd;
+  --color-marker: #fbc63d;
 
-  --color-track-blue: #3b5bdb;
-  --color-track-green: #1e9e6a;
+  --color-track-blue: #4338ca;
+  --color-track-green: #f0b100;
 
-  --color-on-dark: #f6f4ef;
-  --color-on-dark-muted: #a8a29a;
-  --color-dark-line: #2e2d2b;
-  --color-dark-surface: #1d1c1b;
+  --color-on-dark: #ffffff;
+  --color-on-dark-muted: #b6acc6;
+  --color-dark-line: #392c49;
+  --color-dark-surface: #22182e;
 
-  --color-success: #177245;
-  --color-success-soft: #e3f4ea;
+  --color-success: #4338ca;
+  --color-success-soft: #e7e5fb;
   --color-warning: #8a5a00;
   --color-warning-soft: #fff3d1;
-  --color-danger: #b42318;
-  --color-danger-soft: #fde8e7;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fde7e7;
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-bricolage), var(--font-inter), ui-sans-serif, sans-serif;

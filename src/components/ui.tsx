@@ -105,12 +105,12 @@ const buttonBase =
   "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap";
 
 const variants: Record<Variant, string> = {
-  primary: "bg-accent-strong text-white hover:bg-[#a82f0c]",
+  primary: "bg-accent-strong text-white hover:bg-[#5b21b6]",
   dark: "bg-ink text-on-dark hover:bg-ink-soft",
   outline: "border border-line-strong bg-surface text-ink hover:border-ink",
   ghost: "text-ink hover:bg-sunken",
   light: "bg-on-dark text-ink hover:bg-white",
-  danger: "bg-danger text-white hover:bg-[#912018]",
+  danger: "bg-danger text-white hover:bg-[#b91c1c]",
 };
 
 const sizes: Record<Size, string> = {
@@ -152,7 +152,7 @@ const badgeTones: Record<BadgeTone, string> = {
   warning: "bg-warning-soft text-warning",
   danger: "bg-danger-soft text-danger",
   dark: "bg-ink text-on-dark",
-  blue: "bg-[#e7ecfd] text-track-blue",
+  blue: "bg-[#e6e3fb] text-track-blue",
 };
 
 export function Badge({ tone = "neutral", className, children }: { tone?: BadgeTone; className?: string; children: ReactNode }) {
@@ -228,8 +228,8 @@ export function Field({
 // ───────────────────────── feedback ─────────────────────────
 
 const noticeStyles = {
-  info: { box: "bg-[#eef1fd] border-[#d3dbf9] text-[#243a8f]", Icon: Info },
-  success: { box: "bg-success-soft border-[#bfe3cd] text-success", Icon: CheckCircle2 },
+  info: { box: "bg-accent-soft border-[#dbc7f7] text-accent-strong", Icon: Info },
+  success: { box: "bg-success-soft border-[#c7c2f0] text-success", Icon: CheckCircle2 },
   warning: { box: "bg-warning-soft border-[#f3dc9b] text-warning", Icon: AlertTriangle },
   error: { box: "bg-danger-soft border-[#f6c7c3] text-danger", Icon: XCircle },
 } as const;

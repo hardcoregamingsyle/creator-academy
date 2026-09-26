@@ -69,18 +69,18 @@ function renderHtml(subject: string, text: string): string {
     .split(/\n{2,}/)
     .map((p) => {
       const html = escapeHtml(p)
-        .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#C2410C">$1</a>')
+        .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#6D28D9">$1</a>')
         .replace(/\n/g, "<br>");
       return `<p style="margin:0 0 16px;line-height:1.6">${html}</p>`;
     })
     .join("");
-  return `<!doctype html><html><body style="margin:0;background:#F6F4EF;font-family:Arial,Helvetica,sans-serif;color:#141414">
+  return `<!doctype html><html><body style="margin:0;background:#F8F6FC;font-family:Arial,Helvetica,sans-serif;color:#160F20">
 <div style="max-width:560px;margin:0 auto;padding:32px 20px">
-  <div style="font-weight:700;font-size:18px;margin-bottom:24px"><span style="color:#E8431A">●</span> ${escapeHtml(site.name)}</div>
-  <div style="background:#fff;border:1px solid #E6E1D8;border-radius:14px;padding:28px 24px;font-size:15px">
+  <div style="font-weight:700;font-size:18px;margin-bottom:24px"><span style="color:#DC2626">●</span> ${escapeHtml(site.name)}</div>
+  <div style="background:#fff;border:1px solid #E4DCF1;border-radius:14px;padding:28px 24px;font-size:15px">
     <h1 style="font-size:20px;margin:0 0 18px">${escapeHtml(subject)}</h1>
     ${paragraphs}
   </div>
-  <p style="font-size:12px;color:#6B6660;margin-top:20px">${escapeHtml(site.name)} · ${escapeHtml(siteUrl.replace(/^https?:\/\//, ""))}</p>
+  <p style="font-size:12px;color:#685F78;margin-top:20px">${escapeHtml(site.name)} · ${escapeHtml(siteUrl.replace(/^https?:\/\//, ""))}</p>
 </div></body></html>`;
 }

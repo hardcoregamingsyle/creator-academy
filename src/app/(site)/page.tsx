@@ -292,7 +292,7 @@ function NextClassCard({ next }: { next: ClassSession | null }) {
               <div>
                 <p className="text-xs uppercase tracking-wider text-on-dark-muted">You leave with</p>
                 <p className="mt-0.5 flex items-center gap-2 font-semibold">
-                  <Check className="size-4 text-[#5fd3a0]" aria-hidden /> {next.workshop.outcome}
+                  <Check className="size-4 text-marker" aria-hidden /> {next.workshop.outcome}
                 </p>
               </div>
               <ButtonLink href={next.seatsLeft > 0 ? `/book/${next.id}` : `/classes/${next.workshopSlug}`} variant="light">

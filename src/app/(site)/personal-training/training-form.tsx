@@ -234,7 +234,7 @@ export function TrainingForm({
               type="checkbox"
               checked={accept}
               onChange={(e) => setAccept(e.target.checked)}
-              className="mt-0.5 size-4 shrink-0 accent-[#C2370F]"
+              className="mt-0.5 size-4 shrink-0 accent-[#6D28D9]"
               disabled={busy || !timeChosen}
             />
             <span>
