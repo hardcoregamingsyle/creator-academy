@@ -23,11 +23,11 @@ export default async function EmailsPage() {
 
       {!configured && (
         <Notice tone="warning" title="Emails are only being logged, not sent" className="mt-6">
-          No SMTP settings are configured, so emails are recorded here instead of delivered. To send real emails, set
-          these environment variables:{" "}
-          <code className="font-mono">SMTP_HOST</code>, <code className="font-mono">SMTP_PORT</code>,{" "}
-          <code className="font-mono">SMTP_USER</code>, <code className="font-mono">SMTP_PASS</code> and{" "}
-          <code className="font-mono">EMAIL_FROM</code>.
+          No email provider is configured, so emails are recorded here instead of delivered. To send real emails, set{" "}
+          <code className="font-mono">RESEND_API_KEY</code> (recommended), or{" "}
+          <code className="font-mono">SMTP_HOST</code>/<code className="font-mono">SMTP_PORT</code>/
+          <code className="font-mono">SMTP_USER</code>/<code className="font-mono">SMTP_PASS</code> as a fallback,
+          plus optionally <code className="font-mono">EMAIL_FROM</code>.
         </Notice>
       )}
 

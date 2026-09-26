@@ -1,11 +1,17 @@
 import "server-only";
-import nodemailer, { type Transporter } from "nodemailer";
 import { logEmail } from "@/lib/data/misc";
 import { site, siteUrl } from "@/lib/site";
 
 /**
- * Send an email through SMTP when configured; otherwise just record it in the
- * email log (visible in /admin/emails) so nothing is lost during development.
+ * Send an email — Resend's HTTP API first, SMTP (via nodemailer) as a
+ * fallback, and just recording it in the email log (visible in
+ * /admin/emails) if neither is configured.
+ *
+ * Resend is preferred because it's a plain HTTPS request (no raw TCP
+ * sockets), so it works the same on a Node server and on Cloudflare Workers.
+ * SMTP is kept as a fallback for hosts/providers where Resend isn't an
+ * option — note it's not guaranteed to work on Cloudflare Workers, which
+ * doesn't support raw outbound TCP the way Node does.
  */
 
 export type EmailMessage = {
@@ -16,47 +22,86 @@ export type EmailMessage = {
   kind?: "booking" | "training" | "reminder" | "feedback" | "other";
 };
 
-let transporter: Transporter | null = null;
+const RESEND_ENDPOINT = "https://api.resend.com/emails";
+/** Resend's shared sending address — works with no domain setup, good enough until a real domain is verified. */
+const SANDBOX_FROM = "onboarding@resend.dev";
 
-export function emailConfigured(): boolean {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+type Provider = "resend" | "smtp" | "none";
+
+function activeProvider(): Provider {
+  if (process.env.RESEND_API_KEY) return "resend";
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) return "smtp";
+  return "none";
 }
 
-function getTransporter(): Transporter {
-  if (!transporter) {
+export function emailConfigured(): boolean {
+  return activeProvider() !== "none";
+}
+
+export async function sendEmail(msg: EmailMessage): Promise<{ ok: boolean }> {
+  const kind = msg.kind ?? "other";
+  const provider = activeProvider();
+
+  if (provider === "none") {
+    await logEmail({ toEmail: msg.to, subject: msg.subject, bodyText: msg.text, kind, status: "logged", error: null });
+    return { ok: true };
+  }
+
+  try {
+    if (provider === "resend") await sendViaResend(msg);
+    else await sendViaSmtp(msg);
+    await logEmail({ toEmail: msg.to, subject: msg.subject, bodyText: msg.text, kind, status: "sent", error: null });
+    return { ok: true };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    console.error(`[email] send via ${provider} failed:`, error);
+    await logEmail({ toEmail: msg.to, subject: msg.subject, bodyText: msg.text, kind, status: "failed", error });
+    return { ok: false };
+  }
+}
+
+async function sendViaResend(msg: EmailMessage): Promise<void> {
+  const from = process.env.EMAIL_FROM || `${site.name} <${SANDBOX_FROM}>`;
+  const res = await fetch(RESEND_ENDPOINT, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from,
+      to: msg.to,
+      subject: msg.subject,
+      text: msg.text,
+      html: renderHtml(msg.subject, msg.text),
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Resend ${res.status}: ${body.slice(0, 300)}`);
+  }
+}
+
+// nodemailer is dynamically imported so it's only pulled in when SMTP is
+// actually configured — keeps it out of the way for the (recommended, and
+// Workers-compatible) Resend path.
+let smtpTransport: import("nodemailer").Transporter | null = null;
+
+async function sendViaSmtp(msg: EmailMessage): Promise<void> {
+  if (!smtpTransport) {
+    const nodemailer = (await import("nodemailer")).default;
     const port = Number(process.env.SMTP_PORT || 465);
-    transporter = nodemailer.createTransport({
+    smtpTransport = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port,
       secure: port === 465,
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     });
   }
-  return transporter;
-}
-
-export async function sendEmail(msg: EmailMessage): Promise<{ ok: boolean }> {
-  const kind = msg.kind ?? "other";
-  if (!emailConfigured()) {
-    await logEmail({ toEmail: msg.to, subject: msg.subject, bodyText: msg.text, kind, status: "logged", error: null });
-    return { ok: true };
-  }
-  try {
-    await getTransporter().sendMail({
-      from: process.env.EMAIL_FROM || `${site.name} <${process.env.SMTP_USER}>`,
-      to: msg.to,
-      subject: msg.subject,
-      text: msg.text,
-      html: renderHtml(msg.subject, msg.text),
-    });
-    await logEmail({ toEmail: msg.to, subject: msg.subject, bodyText: msg.text, kind, status: "sent", error: null });
-    return { ok: true };
-  } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    console.error("[email] send failed:", error);
-    await logEmail({ toEmail: msg.to, subject: msg.subject, bodyText: msg.text, kind, status: "failed", error });
-    return { ok: false };
-  }
+  await smtpTransport.sendMail({
+    from: process.env.EMAIL_FROM || `${site.name} <${process.env.SMTP_USER}>`,
+    to: msg.to,
+    subject: msg.subject,
+    text: msg.text,
+    html: renderHtml(msg.subject, msg.text),
+  });
 }
 
 function escapeHtml(s: string): string {

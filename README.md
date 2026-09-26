@@ -23,7 +23,7 @@ npm run dev                     # http://localhost:3000
 - Admin dashboard: http://localhost:3000/admin — password is `ADMIN_PASSWORD` from `.env.local`.
 - With no Razorpay keys, the site runs in **demo mode**: the payment step is simulated (clearly
   labelled, no money moves) so you can test the full booking flow.
-- With no SMTP settings, emails are **not sent** — they're saved to the email log at `/admin/emails`.
+- With no `RESEND_API_KEY`, emails are **not sent** — they're saved to the email log at `/admin/emails`.
 
 Useful scripts:
 
@@ -114,8 +114,12 @@ The admin overview page shows most of these as a live checklist.
    `payment.captured` and `order.paid` events and set `RAZORPAY_WEBHOOK_SECRET`.
    Test with Razorpay **test keys** first, then switch to live keys. Razorpay's website review
    checks for the Terms, Privacy, Refund, Delivery and Contact pages — they're all included.
-5. **Email** — set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` (Zoho Mail,
-   Google Workspace, Brevo, etc.). Send yourself a test booking and check `/admin/emails`.
+5. **Email** — create a free [Resend](https://resend.com) account, get an API key, set
+   `RESEND_API_KEY`. Verify your own domain in Resend and set `EMAIL_FROM` to an address on it once
+   you're ready for real sending (Resend's shared `onboarding@resend.dev` sender works immediately
+   without that, for testing). If you'd rather use SMTP instead (any provider), set `SMTP_HOST` /
+   `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` and leave `RESEND_API_KEY` unset — it's used as a
+   fallback. Send yourself a test booking and check `/admin/emails`.
 6. **Admin** — a long `ADMIN_PASSWORD` and a random `SESSION_SECRET`.
 7. **Socials** — fill in the academy's own Instagram / YouTube / Facebook URLs in `src/lib/site.ts`.
 8. **`SITE_URL`** — your real domain (used in emails and links).
@@ -188,8 +192,8 @@ if the host has a **persistent disk** mounted at `data/`; otherwise use Turso.
    wrangler secret put DATABASE_AUTH_TOKEN
    wrangler secret put ADMIN_PASSWORD
    wrangler secret put SESSION_SECRET
-   # optional as you enable them: RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET /
-   # SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / EMAIL_FROM
+   wrangler secret put RESEND_API_KEY          # from resend.com — required for real emails
+   # optional as you enable them: RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET / EMAIL_FROM
    ```
    Or set them in the dashboard instead, once the Worker exists after its first deploy: **Workers &
    Pages** → your worker (named from `wrangler.jsonc`'s `name` field, `creator-academy` by default —
@@ -205,11 +209,10 @@ if the host has a **persistent disk** mounted at `data/`; otherwise use Turso.
 
 - **Database must be Turso**, not a local file — `DATABASE_URL=libsql://…` + `DATABASE_AUTH_TOKEN`.
   `@libsql/client` auto-switches to its Workers-compatible build for `libsql://`/`https://` URLs.
-- **Email (SMTP via nodemailer) is not guaranteed to work.** Workers doesn't support raw outbound
-  TCP the way Node does, so nodemailer's SMTP connection may fail at runtime. The app degrades
-  gracefully — a failed send is logged as `failed` in `/admin/emails` instead of crashing — but you
-  won't get real emails out. If you need real email on Workers, swap `src/lib/email.ts` for an
-  HTTP-based provider (Resend, Postmark, Brevo's API, etc.) instead of SMTP.
+- **Use [Resend](https://resend.com) (`RESEND_API_KEY`), not the SMTP fallback, on Workers.** Resend
+  is a plain HTTPS request, so it works identically here and on a regular Node server. The SMTP
+  fallback (`SMTP_HOST`/etc.) is only there for non-Workers hosts — it's not guaranteed to work on
+  Workers, which doesn't support raw outbound TCP the way Node does.
 
 **Manual deploy** (no GitHub Actions) from a machine with the repo checked out and secrets already
 set as above:
@@ -240,7 +243,7 @@ src/
     data/*.ts          all database queries
     payments.ts        Razorpay REST + signature checks
     checkout.ts        shared fulfilment (mark paid once → confirmation email)
-    email*.ts          SMTP sending + templates (logged to /admin/emails)
+    email*.ts          Resend sending + templates (logged to /admin/emails)
     auth.ts            admin password + signed session cookie
 scripts/db-setup.ts    create / seed / reset the database
 open-next.config.ts    OpenNext Cloudflare adapter config
