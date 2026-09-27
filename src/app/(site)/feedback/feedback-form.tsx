@@ -287,7 +287,7 @@ function ChoiceGroup({
               htmlFor={id}
               className={cn(
                 "cursor-pointer rounded-full border px-4 py-2 text-sm font-medium transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ink/40 peer-focus-visible:ring-offset-2",
-                checked ? "border-ink bg-ink text-on-dark" : "border-line-strong bg-surface text-ink-soft hover:border-ink",
+                checked ? "border-deep bg-deep text-on-dark" : "border-line-strong bg-surface text-ink-soft hover:border-ink",
               )}
             >
               {opt.label}

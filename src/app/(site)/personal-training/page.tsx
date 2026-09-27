@@ -54,7 +54,7 @@ export default async function PersonalTrainingPage() {
                 Book a session <ArrowDown className="size-4" aria-hidden />
               </ButtonLink>
               <ButtonLink href="/classes" variant="outline" size="lg">
-                Or join a ₹299 group class
+                Or join a {formatINR(site.pricing.workshopPaise)} group class
               </ButtonLink>
             </div>
           </div>

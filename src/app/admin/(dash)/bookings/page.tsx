@@ -103,7 +103,7 @@ export default async function BookingsPage({
               href={`/admin/bookings?status=${s.value}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
               className={cn(
                 "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
-                statusFilter === s.value ? "bg-ink text-on-dark" : "bg-sunken text-ink-soft hover:bg-line",
+                statusFilter === s.value ? "bg-deep text-on-dark" : "bg-sunken text-ink-soft hover:bg-line",
               )}
             >
               {s.label}

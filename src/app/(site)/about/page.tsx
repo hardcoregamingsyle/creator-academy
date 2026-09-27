@@ -192,7 +192,7 @@ export default function AboutPage() {
           <ul className="grid gap-5 sm:grid-cols-3">
             {honestyCommitments.map(({ icon: Icon, title, text }) => (
               <li key={title} className="rounded-2xl border border-dark-line bg-dark-surface p-6">
-                <span className="flex size-10 items-center justify-center rounded-xl bg-ink text-on-dark">
+                <span className="flex size-10 items-center justify-center rounded-xl bg-deep text-on-dark">
                   <Icon className="size-5" aria-hidden />
                 </span>
                 <p className="mt-4 font-display text-lg font-bold text-on-dark">{title}</p>
@@ -270,7 +270,7 @@ export default function AboutPage() {
 
       {/* ── final CTA ── */}
       <Section>
-        <Container className="flex flex-col items-center gap-5 rounded-3xl bg-ink px-6 py-14 text-center text-on-dark sm:px-10">
+        <Container className="flex flex-col items-center gap-5 rounded-3xl bg-deep px-6 py-14 text-center text-on-dark sm:px-10">
           <GraduationCap className="size-8 text-accent" aria-hidden />
           <h2 className="max-w-xl text-3xl font-bold sm:text-4xl">Pick a skill and see for yourself</h2>
           <p className="max-w-xl text-on-dark-muted">

@@ -67,7 +67,7 @@ export default async function HomePage() {
                     href={`/classes?category=${c.slug}`}
                     className="group flex h-full flex-col rounded-2xl border border-line bg-surface p-4 transition-colors hover:border-ink sm:p-5"
                   >
-                    <span className="flex size-10 items-center justify-center rounded-xl bg-sunken text-ink transition-colors group-hover:bg-ink group-hover:text-on-dark">
+                    <span className="flex size-10 items-center justify-center rounded-xl bg-sunken text-ink transition-colors group-hover:bg-deep group-hover:text-on-dark">
                       <CategoryIcon category={c.slug} />
                     </span>
                     <span className="mt-4 font-display text-lg font-bold">{c.name}</span>
@@ -86,7 +86,7 @@ export default async function HomePage() {
             <li>
               <Link
                 href="/personal-training"
-                className="flex h-full flex-col justify-between rounded-2xl bg-ink p-4 text-on-dark transition-colors hover:bg-ink-soft sm:p-5"
+                className="flex h-full flex-col justify-between rounded-2xl bg-deep p-4 text-on-dark transition-colors hover:bg-deep-soft sm:p-5"
               >
                 <span className="flex size-10 items-center justify-center rounded-xl bg-dark-surface">
                   <UserRound className="size-5" aria-hidden />
@@ -225,17 +225,17 @@ function Hero({ next }: { next: ClassSession | null }) {
       />
       <Container className="relative grid items-center gap-12 py-14 sm:py-20 lg:grid-cols-[1.15fr_1fr] lg:py-24">
         <div>
-          <Eyebrow>Live creator workshops · {formatINR(site.pricing.workshopPaise)} per class</Eyebrow>
-          <h1 className="mt-5 text-5xl font-extrabold leading-[0.98] tracking-[-0.035em] sm:text-7xl">
+          <Eyebrow className="animate-fade-up">Live creator workshops · {formatINR(site.pricing.workshopPaise)} per class</Eyebrow>
+          <h1 className="mt-5 animate-fade-up text-5xl font-extrabold leading-[0.98] tracking-[-0.035em] [animation-delay:80ms] sm:text-7xl">
             Learn. <span className="marker">Create.</span>
             <br />
             Improve.
           </h1>
-          <p className="mt-6 max-w-xl text-lg text-muted sm:text-xl">
+          <p className="mt-6 max-w-xl animate-fade-up text-lg text-muted [animation-delay:160ms] sm:text-xl">
             Practical creator skills through live workshops and personal training. Pick one skill, spend 90 minutes,
             and leave with something you actually made.
           </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-8 flex animate-fade-up flex-col gap-3 [animation-delay:240ms] sm:flex-row">
             <ButtonLink href="/classes" size="lg">
               Explore classes <ArrowRight className="size-4" aria-hidden />
             </ButtonLink>
@@ -243,7 +243,7 @@ function Hero({ next }: { next: ClassSession | null }) {
               Personal training
             </ButtonLink>
           </div>
-          <ul className="mt-10 grid max-w-xl grid-cols-2 gap-x-6 gap-y-3 text-[15px] text-ink-soft">
+          <ul className="mt-10 grid max-w-xl animate-fade-up grid-cols-2 gap-x-6 gap-y-3 text-[15px] text-ink-soft [animation-delay:320ms]">
             {[
               { icon: Clock, text: "90-minute live classes" },
               { icon: Hammer, text: "Leave with a finished project" },
@@ -258,7 +258,9 @@ function Hero({ next }: { next: ClassSession | null }) {
           </ul>
         </div>
 
-        <NextClassCard next={next} />
+        <div className="animate-pop [animation-delay:120ms]">
+          <NextClassCard next={next} />
+        </div>
       </Container>
     </section>
   );
@@ -268,7 +270,7 @@ function NextClassCard({ next }: { next: ClassSession | null }) {
   return (
     <div className="relative">
       <div className="absolute -inset-3 -z-10 rotate-[-2deg] rounded-[28px] bg-marker/60" aria-hidden />
-      <div className="rounded-3xl bg-ink p-6 text-on-dark shadow-lift sm:p-8">
+      <div className="rounded-3xl bg-deep p-6 text-on-dark shadow-lift sm:p-8">
         <div className="flex items-center justify-between">
           <p className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.16em] text-on-dark-muted">
             <span className="size-2.5 animate-rec rounded-full bg-accent" aria-hidden />
@@ -325,7 +327,7 @@ function ValueEquation() {
     { big: "1 thing made", small: "you leave with a result" },
   ];
   return (
-    <section className="bg-ink text-on-dark">
+    <section className="bg-deep text-on-dark">
       <Container className="py-10 sm:py-12">
         <ol className="grid grid-cols-2 gap-y-8 lg:grid-cols-4">
           {steps.map((s, i) => (
@@ -407,7 +409,7 @@ function WhyUs() {
         />
         <ul className="grid gap-px overflow-hidden rounded-2xl bg-dark-line sm:grid-cols-2 lg:grid-cols-4">
           {reasons.map((r) => (
-            <li key={r.title} className="bg-ink p-6">
+            <li key={r.title} className="bg-deep p-6">
               <r.icon className="size-6 text-accent" aria-hidden />
               <h3 className="mt-4 text-lg font-bold text-on-dark">{r.title}</h3>
               <p className="mt-1.5 text-[15px] text-on-dark-muted">{r.text}</p>

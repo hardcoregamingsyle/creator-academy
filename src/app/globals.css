@@ -6,6 +6,13 @@
  * dominant). Track colours (a/b/c) are only used for the class-structure
  * timeline graphic: indigo → violet → gold, so it stays inside the palette
  * instead of borrowing an off-brand blue/green.
+ *
+ * Dark mode: every token below is redefined for dark under
+ * `:root[data-theme="dark"]` (and automatically via `prefers-color-scheme`
+ * until the visitor picks explicitly — see the theme toggle). `--color-deep`
+ * and `--color-deep-soft` are the exception: they're deliberately-dark
+ * decorative surfaces (footer, feature cards) that stay dark in BOTH themes,
+ * so they don't go white the moment the rest of the page inverts.
  */
 @theme {
   --color-paper: #f8f6fc;
@@ -25,6 +32,10 @@
 
   --color-track-blue: #4338ca;
   --color-track-green: #f0b100;
+
+  /* Fixed dark decorative surface — same value in light AND dark mode. */
+  --color-deep: #160f20;
+  --color-deep-soft: #241a30;
 
   --color-on-dark: #ffffff;
   --color-on-dark-muted: #b6acc6;
@@ -46,6 +57,9 @@
   --shadow-lift: 0 1px 0 rgb(20 20 20 / 0.04), 0 22px 44px -22px rgb(20 20 20 / 0.28);
 
   --animate-rec: rec 1.6s ease-in-out infinite;
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.4s ease-out both;
+  --animate-pop: pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   @keyframes rec {
     0%,
     100% {
@@ -55,6 +69,110 @@
       opacity: 0.35;
     }
   }
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.94);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+}
+
+/* ───────────────────────── dark mode ─────────────────────────
+ * System preference is honoured automatically until the visitor picks a
+ * theme explicitly (ThemeToggle sets data-theme + localStorage; an inline
+ * script in <head> applies it before paint to avoid a flash).
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-paper: #0b0a0f;
+    --color-surface: #141219;
+    --color-sunken: #1c1924;
+    --color-ink: #f6f4fb;
+    --color-ink-soft: #d8d3e4;
+    --color-muted: #a79fbb;
+    --color-subtle: #7c7391;
+    --color-line: #2b2735;
+    --color-line-strong: #3c3649;
+
+    --color-accent: #a684fb;
+    --color-accent-strong: #b794f8;
+    --color-accent-soft: #2a2140;
+    --color-marker: #ffd863;
+
+    --color-track-blue: #8b7bf0;
+    --color-track-green: #ffd863;
+
+    --color-on-dark: #ffffff;
+    --color-on-dark-muted: #b6acc6;
+    --color-dark-line: #392c49;
+    --color-dark-surface: #22182e;
+
+    --color-success: #8b7bf0;
+    --color-success-soft: #241f3a;
+    --color-warning: #ffcf5c;
+    --color-warning-soft: #2e2410;
+    --color-danger: #ff6b6b;
+    --color-danger-soft: #341717;
+
+    --shadow-card: 0 1px 0 rgb(0 0 0 / 0.3), 0 12px 32px -18px rgb(0 0 0 / 0.6);
+    --shadow-lift: 0 1px 0 rgb(0 0 0 / 0.3), 0 22px 44px -22px rgb(0 0 0 / 0.7);
+  }
+}
+:root[data-theme="dark"] {
+  --color-paper: #0b0a0f;
+  --color-surface: #141219;
+  --color-sunken: #1c1924;
+  --color-ink: #f6f4fb;
+  --color-ink-soft: #d8d3e4;
+  --color-muted: #a79fbb;
+  --color-subtle: #7c7391;
+  --color-line: #2b2735;
+  --color-line-strong: #3c3649;
+
+  --color-accent: #a684fb;
+  --color-accent-strong: #b794f8;
+  --color-accent-soft: #2a2140;
+  --color-marker: #ffd863;
+
+  --color-track-blue: #8b7bf0;
+  --color-track-green: #ffd863;
+
+  --color-on-dark: #ffffff;
+  --color-on-dark-muted: #b6acc6;
+  --color-dark-line: #392c49;
+  --color-dark-surface: #22182e;
+
+  --color-success: #8b7bf0;
+  --color-success-soft: #241f3a;
+  --color-warning: #ffcf5c;
+  --color-warning-soft: #2e2410;
+  --color-danger: #ff6b6b;
+  --color-danger-soft: #341717;
+
+  --shadow-card: 0 1px 0 rgb(0 0 0 / 0.3), 0 12px 32px -18px rgb(0 0 0 / 0.6);
+  --shadow-lift: 0 1px 0 rgb(0 0 0 / 0.3), 0 22px 44px -22px rgb(0 0 0 / 0.7);
 }
 
 @layer base {
@@ -68,6 +186,7 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
   ::selection {
     background: var(--color-marker);
@@ -90,6 +209,18 @@
   }
   [id] {
     scroll-margin-top: 88px;
+  }
+  /* Smooth, consistent transitions for interactive elements site-wide. */
+  a,
+  button,
+  input,
+  textarea,
+  select,
+  summary,
+  [role="button"] {
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+    transition-duration: 0.18s;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
@@ -135,6 +266,15 @@
   }
   .prose-academy strong {
     color: var(--color-ink);
+  }
+
+  /* Lift-on-hover for cards (workshop cards, etc.) — smoother, springier than a plain transition. */
+  .lift-hover {
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 0.2s ease;
+  }
+  .lift-hover:hover {
+    transform: translateY(-3px);
   }
 }
 

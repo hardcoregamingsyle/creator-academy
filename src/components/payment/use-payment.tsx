@@ -16,7 +16,7 @@ import { Button } from "@/components/ui";
  * On success the browser is redirected to the booking confirmation page.
  */
 
-export type PayKind = "workshop" | "training";
+export type PayKind = "workshop" | "training" | "pass";
 
 type StartResponse =
   | {
@@ -203,7 +203,7 @@ export function DemoPaymentDialog({ payment }: { payment: PaymentController }) {
   if (!payment.demo) return null;
   const verifying = payment.state === "verifying" || payment.state === "redirecting";
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-labelledby="demo-pay-title">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-deep/50 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-labelledby="demo-pay-title">
       <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-lift">
         <div className="flex items-center gap-2 text-warning">
           <FlaskConical className="size-5" aria-hidden />

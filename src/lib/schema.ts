@@ -194,4 +194,27 @@ CREATE TABLE IF NOT EXISTS email_otp_codes (
   created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_otp_email_created ON email_otp_codes (email, created_at);
+
+-- ───────────────────────── monthly all-access pass ─────────────────────────
+-- A pass covers every workshop session scheduled in month_key (IST calendar
+-- month, "YYYY-MM") for the email that bought it. Matched by email — no
+-- account/login needed, same pattern as the returning-student discount.
+
+CREATE TABLE IF NOT EXISTS monthly_passes (
+  id                  TEXT PRIMARY KEY,
+  code                TEXT NOT NULL UNIQUE,
+  email               TEXT NOT NULL,
+  name                TEXT NOT NULL,
+  phone               TEXT,
+  month_key           TEXT NOT NULL,
+  amount_paise        INTEGER NOT NULL,
+  status              TEXT NOT NULL DEFAULT 'pending', -- pending | paid | refunded | cancelled | failed
+  payment_provider    TEXT,
+  provider_order_id   TEXT,
+  provider_payment_id TEXT,
+  created_at          TEXT NOT NULL,
+  paid_at             TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pass_email_month ON monthly_passes (email, month_key);
+CREATE INDEX IF NOT EXISTS idx_pass_order ON monthly_passes (provider_order_id);
 `;

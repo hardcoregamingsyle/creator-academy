@@ -97,7 +97,9 @@ export default async function AdminOverviewPage() {
                   <div className="h-full rounded-full bg-accent-strong" style={{ width: `${pct}%` }} />
                 </div>
                 <p className="mt-1.5 text-xs text-muted">
-                  {remaining > 0 ? `≈ ${plural(seatsToGo, "more ₹299 seat")} to go` : "Milestone reached."}
+                  {remaining > 0
+                    ? `≈ ${plural(seatsToGo, `more ${formatINR(WORKSHOP_PRICE_PAISE)} seat`)} to go`
+                    : "Milestone reached."}
                 </p>
               </div>
             );

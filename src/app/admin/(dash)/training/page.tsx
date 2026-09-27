@@ -129,7 +129,7 @@ export default async function TrainingAdminPage({
                 href={`/admin/training?tab=${t}`}
                 className={cn(
                   "rounded-full px-3.5 py-1.5 text-sm font-medium capitalize transition-colors",
-                  scope === t ? "bg-ink text-on-dark" : "bg-sunken text-ink-soft hover:bg-line",
+                  scope === t ? "bg-deep text-on-dark" : "bg-sunken text-ink-soft hover:bg-line",
                 )}
               >
                 {t}

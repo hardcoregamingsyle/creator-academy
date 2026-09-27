@@ -57,7 +57,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ slug: s
               aria-current={s === slug ? "page" : undefined}
               className={cn(
                 "rounded-full border px-4 py-2 text-sm font-medium transition-colors",
-                s === slug ? "border-ink bg-ink text-on-dark" : "border-line-strong bg-surface text-ink-soft hover:border-ink",
+                s === slug ? "border-deep bg-deep text-on-dark" : "border-line-strong bg-surface text-ink-soft hover:border-ink",
               )}
             >
               {policyMeta[s].title}

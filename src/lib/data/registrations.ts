@@ -1,6 +1,8 @@
 import { execute, newCode, newId, nowIso, query, queryOne } from "@/lib/db";
+import { istMonthKey } from "@/lib/format";
 import { site } from "@/lib/site";
 import { getWorkshop, type Workshop } from "@/content/workshops";
+import { hasActivePass } from "./monthly-pass";
 import { getPreviousSession, getSession, holdCutoffIso, isBookable, type ClassSession } from "./sessions";
 
 export type RegistrationStatus = "pending" | "paid" | "failed" | "refunded" | "cancelled";
@@ -16,6 +18,8 @@ export type Registration = {
   discountPaise: number;
   amountPaise: number;
   discountSourceSessionId: string | null;
+  /** Set when this booking was fully covered by a Monthly Pass instead of paid individually. */
+  coveredByPassId: string | null;
   status: RegistrationStatus;
   paymentProvider: string | null;
   providerOrderId: string | null;
@@ -45,6 +49,7 @@ type RegRow = {
   discount_paise: number;
   amount_paise: number;
   discount_source_session_id: string | null;
+  covered_by_pass_id: string | null;
   status: RegistrationStatus;
   payment_provider: string | null;
   provider_order_id: string | null;
@@ -74,6 +79,7 @@ function mapReg(r: RegRow): Registration {
     discountPaise: Number(r.discount_paise),
     amountPaise: Number(r.amount_paise),
     discountSourceSessionId: r.discount_source_session_id,
+    coveredByPassId: r.covered_by_pass_id,
     status: r.status,
     paymentProvider: r.payment_provider,
     providerOrderId: r.provider_order_id,
@@ -157,7 +163,7 @@ export type BookingInput = {
 };
 
 export type BookingResult =
-  | { ok: true; registration: Registration; session: ClassSession; reused: boolean }
+  | { ok: true; registration: Registration; session: ClassSession; reused: boolean; coveredByPass?: boolean }
   | { ok: false; error: string; existingCode?: string };
 
 /**
@@ -196,11 +202,16 @@ export async function createPendingRegistration(input: BookingInput): Promise<Bo
 
   if (!isBookable(session)) return { ok: false, error: "Sorry — this session is full." };
 
-  const discount = await checkReturningDiscount(email);
+  // A Monthly Pass covering this session's month gives free entry — checked
+  // ahead of the returning-student discount, since it fully replaces it.
+  const activePass = await hasActivePass(email, istMonthKey(session.startsAt));
   const base = session.pricePaise;
-  const { discountPaise, amountPaise } = discount.eligible
-    ? applyDiscount(base, discount.percent)
-    : { discountPaise: 0, amountPaise: base };
+  const discount = activePass ? null : await checkReturningDiscount(email);
+  const { discountPaise, amountPaise } = activePass
+    ? { discountPaise: base, amountPaise: 0 }
+    : discount?.eligible
+      ? applyDiscount(base, discount.percent)
+      : { discountPaise: 0, amountPaise: base };
 
   const reg: Registration = {
     id: newId(),
@@ -212,21 +223,24 @@ export async function createPendingRegistration(input: BookingInput): Promise<Bo
     basePaise: base,
     discountPaise,
     amountPaise,
-    discountSourceSessionId: discount.eligible ? discount.sourceSessionId : null,
-    status: "pending",
-    paymentProvider: null,
+    discountSourceSessionId: discount?.eligible ? discount.sourceSessionId : null,
+    coveredByPassId: activePass?.id ?? null,
+    status: activePass ? "paid" : "pending",
+    paymentProvider: activePass ? "pass" : null,
     providerOrderId: null,
     providerPaymentId: null,
     attended: false,
     createdAt: nowIso(),
-    paidAt: null,
+    paidAt: activePass ? nowIso() : null,
   };
   // Insert only if a seat is still free — checked in the same statement so two
-  // people can't both grab the last seat.
+  // people can't both grab the last seat. Pass-covered bookings go straight to
+  // 'paid' (no payment step), everyone else starts 'pending' and holds the
+  // seat for site.seatHoldMinutes.
   const inserted = await execute(
     `INSERT INTO registrations (id, code, session_id, name, email, phone, base_paise, discount_paise, amount_paise,
-       discount_source_session_id, status, created_at)
-     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?
+       discount_source_session_id, covered_by_pass_id, status, payment_provider, created_at, paid_at)
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
      WHERE (SELECT COUNT(*) FROM registrations r WHERE r.session_id = ?
               AND (r.status = 'paid' OR (r.status = 'pending' AND r.created_at > ?)))
          < (SELECT capacity FROM class_sessions WHERE id = ?)`,
@@ -241,14 +255,18 @@ export async function createPendingRegistration(input: BookingInput): Promise<Bo
       reg.discountPaise,
       reg.amountPaise,
       reg.discountSourceSessionId,
+      reg.coveredByPassId,
+      reg.status,
+      reg.paymentProvider,
       reg.createdAt,
+      reg.paidAt,
       reg.sessionId,
       cutoff,
       reg.sessionId,
     ],
   );
   if (inserted === 0) return { ok: false, error: "Sorry — this session just filled up." };
-  return { ok: true, registration: reg, session, reused: false };
+  return { ok: true, registration: reg, session, reused: false, coveredByPass: Boolean(activePass) };
 }
 
 /**

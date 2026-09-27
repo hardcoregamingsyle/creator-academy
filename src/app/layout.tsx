@@ -25,13 +25,25 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f8f6fc",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f8f6fc" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0a0f" },
+  ],
 };
+
+// Applied before paint so the page never flashes the wrong theme. Keep this
+// tiny and dependency-free — it runs before React hydrates.
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("ca-theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t)}}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-IN" className={`${inter.variable} ${bricolage.variable} ${jetbrains.variable}`}>
-      <body className="min-h-dvh">{children}</body>
+    <html lang="en-IN" className={`${inter.variable} ${bricolage.variable} ${jetbrains.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body className="min-h-dvh" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }

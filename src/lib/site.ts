@@ -6,11 +6,10 @@
  * creator identity — only put the academy's own details in this file.
  */
 export const site = {
-  /** Public brand name (working name — change once the final brand is chosen). */
-  name: "Creator Academy",
+  name: "CREATEVA",
   tagline: "Learn. Create. Improve.",
   description:
-    "Practical creator skills through live workshops and personal training. 90-minute, project-based classes for ₹299 — leave every class with something you actually made.",
+    "Practical creator skills through live workshops, a monthly all-access course, and personal training. 90-minute, project-based classes for ₹279 — leave every class with something you actually made.",
 
   /** Business contact details shown on the website. */
   contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL || "hello@example.com",
@@ -40,9 +39,15 @@ export const site = {
 
   /** Pricing (in paise: ₹1 = 100 paise). */
   pricing: {
-    workshopPaise: 29900,
+    workshopPaise: 27900,
     /** Returning-student discount for people who attended the immediately previous class. */
     returningDiscountPercent: 10,
+    /**
+     * Monthly Creator Course / All-Access Pass — covers every workshop
+     * session scheduled in the calendar month it's bought for, so students
+     * don't pay per-class. One flat price for now (keep it simple).
+     */
+    monthlyPassPaise: 149900,
   },
 
   /** Default seats per live workshop — small groups so everyone can ask questions. */

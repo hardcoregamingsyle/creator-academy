@@ -5,13 +5,14 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Logo } from "./brand";
+import { ThemeToggle } from "./theme-toggle";
 import { buttonClass, cn } from "./ui";
 
 const nav = [
   { href: "/classes", label: "Classes" },
+  { href: "/monthly-pass", label: "Monthly Pass" },
   { href: "/schedule", label: "Schedule" },
   { href: "/personal-training", label: "Personal training" },
-  { href: "/#how-it-works", label: "How it works" },
   { href: "/faq", label: "FAQ" },
 ];
 
@@ -47,7 +48,8 @@ export function SiteHeader() {
             </Link>
           ))}
         </nav>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <ThemeToggle />
           <div className="hidden sm:block">
             <Link href="/classes" className={buttonClass("dark", "sm")}>
               Explore classes

@@ -25,10 +25,30 @@ function getClient(): Client {
   return client;
 }
 
+/**
+ * Column additions to existing tables. `CREATE TABLE IF NOT EXISTS` in SCHEMA
+ * doesn't help once a table already exists in production — SQLite has no
+ * `ADD COLUMN IF NOT EXISTS`, so each migration is just tried and a "duplicate
+ * column" failure (already applied) is swallowed.
+ */
+const MIGRATIONS: string[] = [
+  // Lets a registration be fully covered by a Monthly Pass instead of paid individually.
+  "ALTER TABLE registrations ADD COLUMN covered_by_pass_id TEXT",
+];
+
 async function ensureSchema(): Promise<void> {
   if (!ready) {
     ready = getClient()
       .executeMultiple(SCHEMA)
+      .then(async () => {
+        for (const sql of MIGRATIONS) {
+          await getClient()
+            .execute(sql)
+            .catch((err) => {
+              if (!/duplicate column/i.test(String(err?.message ?? err))) throw err;
+            });
+        }
+      })
       .catch((err) => {
         ready = null;
         throw err;

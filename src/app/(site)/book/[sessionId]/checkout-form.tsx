@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ArrowRight, BadgePercent, Lock } from "lucide-react";
+import { ArrowRight, BadgePercent, Lock, Sparkles } from "lucide-react";
 import { formatINR } from "@/lib/format";
 import { isEmail } from "@/lib/validate";
 import { Button, Field, Input, Notice } from "@/components/ui";
@@ -13,7 +14,14 @@ import {
   usePayment,
 } from "@/components/payment/use-payment";
 
-type Discount = { eligible: true; percent: number; sourceWorkshopTitle: string; discountPaise: number; amountPaise: number };
+type Discount = {
+  eligible: true;
+  percent?: number;
+  sourceWorkshopTitle?: string;
+  discountPaise: number;
+  amountPaise: number;
+  coveredByPass?: boolean;
+};
 
 export function CheckoutForm({
   sessionId,
@@ -25,6 +33,7 @@ export function CheckoutForm({
   demoMode: boolean;
 }) {
   const payment = usePayment();
+  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -76,6 +85,13 @@ export function CheckoutForm({
       return;
     }
     const code = res.code as string;
+
+    // Covered by a Monthly Pass — already paid server-side, no checkout step.
+    if (res.coveredByPass) {
+      router.push(`/booking/${code}`);
+      return;
+    }
+
     // Trust the server's price (it applies the returning-student discount itself).
     if (res.discountPaise > 0) {
       setDiscount((d) =>
@@ -93,7 +109,7 @@ export function CheckoutForm({
     await payment.pay("workshop", code);
   }
 
-  const idleLabel = `Continue to payment · ${formatINR(amount)}`;
+  const idleLabel = discount?.coveredByPass ? "Confirm booking — Free" : `Continue to payment · ${formatINR(amount)}`;
 
   return (
     <form onSubmit={onSubmit} className="space-y-5" noValidate>
@@ -128,7 +144,14 @@ export function CheckoutForm({
           disabled={busy}
         />
       </Field>
-      {discount && (
+      {discount?.coveredByPass && (
+        <Notice tone="success" title="Covered by your Monthly Pass — this class is free">
+          <span className="inline-flex items-center gap-1.5">
+            <Sparkles className="size-3.5" aria-hidden /> No payment needed — just confirm your details below.
+          </span>
+        </Notice>
+      )}
+      {discount && !discount.coveredByPass && (
         <Notice tone="success" title={`Welcome back — ${discount.percent}% returning-student discount applied`}>
           Thanks for attending {discount.sourceWorkshopTitle}. You pay {formatINR(discount.amountPaise)} instead of{" "}
           {formatINR(pricePaise)}.
@@ -179,7 +202,13 @@ export function CheckoutForm({
           <span>Workshop seat</span>
           <span>{formatINR(pricePaise)}</span>
         </div>
-        {discount && (
+        {discount?.coveredByPass && (
+          <div className="mt-2 flex justify-between text-success">
+            <span>Monthly Pass</span>
+            <span>−{formatINR(discount.discountPaise)}</span>
+          </div>
+        )}
+        {discount && !discount.coveredByPass && (
           <div className="mt-2 flex justify-between text-success">
             <span>Returning-student discount ({discount.percent}%)</span>
             <span>−{formatINR(discount.discountPaise)}</span>

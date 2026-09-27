@@ -8,6 +8,7 @@ const columns = [
     title: "Learn",
     links: [
       { href: "/classes", label: "All classes" },
+      { href: "/monthly-pass", label: "Monthly Pass" },
       { href: "/schedule", label: "Upcoming schedule" },
       { href: "/personal-training", label: "Personal training" },
       { href: "/feedback", label: "Class feedback" },
@@ -37,7 +38,7 @@ export function SiteFooter() {
   const year = new Date().getFullYear();
   const legalName = process.env.NEXT_PUBLIC_LEGAL_NAME;
   return (
-    <footer className="bg-ink text-on-dark">
+    <footer className="bg-deep text-on-dark">
       <Container className="py-14 sm:py-16">
         <div className="grid gap-12 lg:grid-cols-[1.3fr_2fr]">
           <div className="max-w-sm">

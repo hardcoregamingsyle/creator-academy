@@ -6,7 +6,7 @@ const POLICY_SLUGS = ["terms", "privacy", "refunds", "delivery"] as const;
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = new Date();
-  const staticPaths = ["", "/classes", "/schedule", "/personal-training", "/faq", "/about", "/contact"];
+  const staticPaths = ["", "/classes", "/monthly-pass", "/schedule", "/personal-training", "/faq", "/about", "/contact"];
 
   return [
     ...staticPaths.map((path) => ({ url: `${siteUrl}${path}`, lastModified })),

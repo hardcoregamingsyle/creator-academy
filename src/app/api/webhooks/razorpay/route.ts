@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fulfilPayment } from "@/lib/checkout";
 import { getRegistrationByOrderId } from "@/lib/data/registrations";
 import { getTrainingBookingByOrderId } from "@/lib/data/training";
+import { getPassByOrderId } from "@/lib/data/monthly-pass";
 import { verifyWebhookSignature } from "@/lib/payments";
 
 /**
@@ -37,6 +38,11 @@ export async function POST(req: Request) {
   const booking = await getTrainingBookingByOrderId(orderId);
   if (booking) {
     await fulfilPayment("training", booking.id, { provider: "razorpay", paymentId: payment?.id ?? null });
+    return NextResponse.json({ ok: true });
+  }
+  const pass = await getPassByOrderId(orderId);
+  if (pass) {
+    await fulfilPayment("pass", pass.id, { provider: "razorpay", paymentId: payment?.id ?? null });
   }
   return NextResponse.json({ ok: true });
 }

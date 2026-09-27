@@ -34,7 +34,7 @@ export function Section({
       className={cn(
         "py-16 sm:py-24",
         tone === "surface" && "bg-surface border-y border-line",
-        tone === "dark" && "bg-ink text-on-dark",
+        tone === "dark" && "bg-deep text-on-dark",
         className,
       )}
     >
@@ -102,14 +102,14 @@ type Variant = "primary" | "dark" | "outline" | "ghost" | "light" | "danger";
 type Size = "sm" | "md" | "lg";
 
 const buttonBase =
-  "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap";
+  "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 whitespace-nowrap";
 
 const variants: Record<Variant, string> = {
   primary: "bg-accent-strong text-white hover:bg-[#5b21b6]",
-  dark: "bg-ink text-on-dark hover:bg-ink-soft",
+  dark: "bg-deep text-on-dark hover:bg-deep-soft",
   outline: "border border-line-strong bg-surface text-ink hover:border-ink",
   ghost: "text-ink hover:bg-sunken",
-  light: "bg-on-dark text-ink hover:bg-white",
+  light: "bg-on-dark text-deep hover:bg-white",
   danger: "bg-danger text-white hover:bg-[#b91c1c]",
 };
 
@@ -151,7 +151,7 @@ const badgeTones: Record<BadgeTone, string> = {
   success: "bg-success-soft text-success",
   warning: "bg-warning-soft text-warning",
   danger: "bg-danger-soft text-danger",
-  dark: "bg-ink text-on-dark",
+  dark: "bg-deep text-on-dark",
   blue: "bg-[#e6e3fb] text-track-blue",
 };
 
@@ -271,9 +271,21 @@ export function Stars({ rating, className, size = "size-4" }: { rating: number; 
   );
 }
 
-export function EmptyState({ icon, title, children, action }: { icon?: ReactNode; title: ReactNode; children?: ReactNode; action?: ReactNode }) {
+export function EmptyState({
+  icon,
+  title,
+  children,
+  action,
+  className,
+}: {
+  icon?: ReactNode;
+  title: ReactNode;
+  children?: ReactNode;
+  action?: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="rounded-2xl border border-dashed border-line-strong bg-surface/60 px-6 py-12 text-center">
+    <div className={cn("rounded-2xl border border-dashed border-line-strong bg-surface/60 px-6 py-12 text-center", className)}>
       {icon && <div className="mx-auto mb-4 flex size-11 items-center justify-center rounded-full bg-sunken text-muted">{icon}</div>}
       <p className="font-display text-lg font-bold text-ink">{title}</p>
       {children && <div className="mx-auto mt-2 max-w-md text-sm text-muted">{children}</div>}

@@ -5,7 +5,7 @@
 
 const TZ = "Asia/Kolkata";
 
-/** ₹299 / ₹269.10 — whole rupees drop the decimals. */
+/** ₹279 / ₹251.10 — whole rupees drop the decimals. */
 export function formatINR(paise: number): string {
   const rupees = paise / 100;
   const whole = Number.isInteger(rupees);
@@ -75,6 +75,31 @@ export function fromISTInputs(date: string, time: string): string {
   const d = new Date(`${date}T${time}:00+05:30`);
   if (Number.isNaN(d.getTime())) throw new Error("Invalid date/time");
   return d.toISOString();
+}
+
+/** IST calendar month key for a timestamp, e.g. "2026-10". */
+export function istMonthKey(iso: string | Date): string {
+  return toISTInputs(typeof iso === "string" ? iso : iso.toISOString()).date.slice(0, 7);
+}
+
+/** This IST calendar month's key, e.g. "2026-10". */
+export function currentMonthKey(): string {
+  return istMonthKey(new Date().toISOString());
+}
+
+/** The IST calendar month key after the given one (or after now). */
+export function nextMonthKey(from: string = currentMonthKey()): string {
+  const [y, m] = from.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m, 1)); // m is 1-based here, so this is already +1 month
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** "October 2026" from a "2026-10" month key. */
+export function monthLabel(monthKey: string): string {
+  const [y, m] = monthKey.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }).format(
+    new Date(Date.UTC(y, m - 1, 1)),
+  );
 }
 
 /** "3 hours ago"-style relative label for admin lists. */

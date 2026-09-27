@@ -1,7 +1,8 @@
-import { formatDateLong, formatINR, formatTimeRange } from "@/lib/format";
+import { formatDateLong, formatINR, formatTimeRange, monthLabel } from "@/lib/format";
 import { site, siteUrl } from "@/lib/site";
 import type { RegistrationWithSession } from "@/lib/data/registrations";
 import type { TrainingBooking } from "@/lib/data/training";
+import type { MonthlyPass } from "@/lib/data/monthly-pass";
 import type { EmailMessage } from "@/lib/email";
 
 /** Plain-text email templates. Keep them short, specific and friendly. */
@@ -22,7 +23,9 @@ export function workshopConfirmationEmail(reg: RegistrationWithSession): EmailMe
       `Registration ID: ${reg.code}`,
       `Date: ${formatDateLong(reg.sessionStartsAt)}`,
       `Time: ${formatTimeRange(reg.sessionStartsAt, reg.sessionDurationMin)}`,
-      `Amount paid: ${formatINR(reg.amountPaise)}${reg.discountPaise ? ` (includes ${formatINR(reg.discountPaise)} returning-student discount)` : ""}`,
+      reg.coveredByPassId
+        ? `Amount paid: ${formatINR(0)} — covered by your Monthly Pass`
+        : `Amount paid: ${formatINR(reg.amountPaise)}${reg.discountPaise ? ` (includes ${formatINR(reg.discountPaise)} returning-student discount)` : ""}`,
     ].join("\n"),
     joiningBlock(reg.meetingLink),
     w?.bring.length ? `Please have ready:\n${w.bring.map((b) => `• ${b}`).join("\n")}` : "",
@@ -111,6 +114,24 @@ export function trainingLinkEmail(b: TrainingBooking): EmailMessage {
       `— ${site.name}`,
     ].join("\n\n"),
     kind: "training",
+  };
+}
+
+export function monthlyPassConfirmationEmail(pass: MonthlyPass): EmailMessage {
+  const label = monthLabel(pass.monthKey);
+  return {
+    to: pass.email,
+    subject: `You're all set — ${label} All-Access Pass`,
+    text: [
+      `Hi ${pass.name.split(" ")[0]},`,
+      `Your ${label} All-Access Pass is confirmed. You can now book any live workshop scheduled in ${label} for free — just use this same email address at checkout and the class is instantly confirmed, no payment step.`,
+      [`Pass ID: ${pass.code}`, `Covers: ${label}`, `Amount paid: ${formatINR(pass.amountPaise)}`].join("\n"),
+      `See what's scheduled and book your classes: ${siteUrl}/schedule`,
+      `Your pass page: ${siteUrl}/monthly-pass/${pass.code}`,
+      `Questions? Just reply to this email or write to ${site.contactEmail}.`,
+      `— ${site.name}`,
+    ].join("\n\n"),
+    kind: "booking",
   };
 }
 

@@ -31,7 +31,7 @@ export function WorkshopCard({
     <Link
       href={`/classes/${workshop.slug}`}
       className={cn(
-        "group relative flex h-full flex-col rounded-2xl border border-line bg-surface p-6 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-lift",
+        "lift-hover group relative flex h-full flex-col rounded-2xl border border-line bg-surface p-6 shadow-card hover:border-line-strong hover:shadow-lift",
         className,
       )}
     >
@@ -77,7 +77,7 @@ export function WorkshopCard({
           )}
         </div>
         <span
-          className="flex size-10 shrink-0 items-center justify-center rounded-full border border-line-strong text-ink transition-colors group-hover:border-ink group-hover:bg-ink group-hover:text-on-dark"
+          className="flex size-10 shrink-0 items-center justify-center rounded-full border border-line-strong text-ink transition-colors group-hover:border-ink group-hover:bg-deep group-hover:text-on-dark"
           aria-hidden
         >
           <ArrowUpRight className="size-4" />
