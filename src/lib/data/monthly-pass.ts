@@ -1,6 +1,6 @@
 import { execute, newCode, newId, nowIso, query, queryOne } from "@/lib/db";
 import { currentMonthKey, monthLabel, nextMonthKey } from "@/lib/format";
-import { site } from "@/lib/site";
+import { getSiteSettings } from "@/lib/data/site-settings";
 import { normaliseEmail } from "./registrations";
 import { holdCutoffIso } from "./sessions";
 
@@ -112,6 +112,7 @@ export async function createPendingPass(input: PassInput): Promise<PassResult> {
     return { ok: true, pass: mapPass({ ...pending, name, phone }), reused: true };
   }
 
+  const settings = await getSiteSettings();
   const pass: MonthlyPass = {
     id: newId(),
     code: newCode("CV"),
@@ -119,7 +120,7 @@ export async function createPendingPass(input: PassInput): Promise<PassResult> {
     name,
     phone,
     monthKey: input.monthKey,
-    amountPaise: site.pricing.monthlyPassPaise,
+    amountPaise: settings.monthlyPassPricePaise,
     status: "pending",
     paymentProvider: null,
     providerOrderId: null,

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { ArrowRight, Star } from "lucide-react";
-import { site } from "@/lib/site";
 import { Button, ButtonLink, Field, Input, Notice, Select, Textarea, cn } from "@/components/ui";
 
 type AttendAgain = "yes" | "maybe" | "no";
@@ -11,10 +10,12 @@ export function FeedbackForm({
   initialCode,
   lockedWorkshop,
   liveWorkshops,
+  returningDiscountPercent,
 }: {
   initialCode: string;
   lockedWorkshop: { slug: string; title: string } | null;
   liveWorkshops: { slug: string; title: string }[];
+  returningDiscountPercent: number;
 }) {
   const [code, setCode] = useState(initialCode);
   const [workshopSlug, setWorkshopSlug] = useState("");
@@ -70,7 +71,7 @@ export function FeedbackForm({
       <Notice tone="success" title="Thanks for the feedback">
         <p>
           It goes straight to our team and shapes what we schedule next. As a thank-you for attending, book your next
-          class before our next class starts and {site.pricing.returningDiscountPercent}% comes off automatically at
+          class before our next class starts and {returningDiscountPercent}% comes off automatically at
           checkout — just use the same email.
         </p>
         <ButtonLink href="/schedule" size="sm" className="mt-4">

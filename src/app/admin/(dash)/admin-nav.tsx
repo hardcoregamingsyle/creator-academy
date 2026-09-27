@@ -4,10 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   CalendarDays,
+  IndianRupee,
   LayoutDashboard,
+  LibraryBig,
   Mail,
   MessageSquareQuote,
   Send,
+  Share2,
   Sparkles,
   Ticket,
   TrendingUp,
@@ -18,7 +21,9 @@ import { cn } from "@/components/ui";
 
 const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
+  { href: "/admin/pricing", label: "Pricing", icon: IndianRupee },
   { href: "/admin/sessions", label: "Sessions", icon: CalendarDays },
+  { href: "/admin/classes", label: "Classes", icon: LibraryBig },
   { href: "/admin/bookings", label: "Bookings", icon: Ticket },
   { href: "/admin/passes", label: "Monthly Pass", icon: Sparkles },
   { href: "/admin/training", label: "Personal training", icon: UserRound },
@@ -26,6 +31,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin/demand", label: "Demand", icon: TrendingUp },
   { href: "/admin/messages", label: "Messages", icon: Mail },
   { href: "/admin/emails", label: "Emails", icon: Send },
+  { href: "/admin/socials", label: "Socials", icon: Share2 },
 ];
 
 function isActivePath(pathname: string, href: string): boolean {

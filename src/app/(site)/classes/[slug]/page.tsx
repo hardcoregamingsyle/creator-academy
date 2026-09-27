@@ -15,10 +15,12 @@ import {
   Users2,
   Video,
 } from "lucide-react";
-import { faqGroups, type FaqItem } from "@/content/faq";
-import { classStructure, getCategory, getWorkshop, workshops } from "@/content/workshops";
+import { getFaqGroups, type FaqItem } from "@/content/faq";
+import { classStructure, getCategory } from "@/content/workshops";
+import { getWorkshop, listWorkshops } from "@/lib/data/workshops";
 import { listPublicTestimonials } from "@/lib/data/feedback";
 import { listUpcomingSessions } from "@/lib/data/sessions";
+import { getSiteSettings } from "@/lib/data/site-settings";
 import { formatDateLong, formatINR, formatTimeRange } from "@/lib/format";
 import { site } from "@/lib/site";
 import { CategoryIcon } from "@/components/brand";
@@ -31,42 +33,45 @@ import { WorkshopCard, WorkshopStatusBadge } from "@/components/workshop-card";
 
 export const dynamic = "force-dynamic";
 
-// A short, generically-relevant selection — every class page shows the same
-// core questions about how classes work and how booking/payment works.
-const detailFaq: FaqItem[] = [
-  faqGroups[0].items[0], // What happens in a class?
-  faqGroups[0].items[1], // Do I have to take classes in order?
-  faqGroups[1].items[3], // returning-student discount
-  faqGroups[1].items[4], // cancel or reschedule
-];
-
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const workshop = getWorkshop(slug);
+  const workshop = await getWorkshop(slug);
   if (!workshop) return { title: "Class not found" };
   return { title: workshop.title, description: workshop.promise };
 }
 
 export default async function WorkshopPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const workshop = getWorkshop(slug);
+  const workshop = await getWorkshop(slug);
   if (!workshop) notFound();
 
   const category = getCategory(workshop.category);
   const simple = workshop.learn.length === 0 && workshop.forWho.length === 0;
 
-  const [allUpcoming, testimonials] = await Promise.all([
+  const [allUpcoming, testimonials, allWorkshops, settings, faqGroups] = await Promise.all([
     listUpcomingSessions(),
     listPublicTestimonials({ workshopSlug: slug, limit: 6 }),
+    listWorkshops(),
+    getSiteSettings(),
+    getFaqGroups(),
   ]);
   const sessionsForWorkshop = allUpcoming.filter((s) => s.workshopSlug === slug);
+
+  // A short, generically-relevant selection — every class page shows the same
+  // core questions about how classes work and how booking/payment works.
+  const detailFaq: FaqItem[] = [
+    faqGroups[0].items[0], // What happens in a class?
+    faqGroups[0].items[1], // Do I have to take classes in order?
+    faqGroups[1].items[3], // returning-student discount
+    faqGroups[1].items[4], // cancel or reschedule
+  ];
 
   const nextByWorkshop = new Map<string, string>();
   for (const s of allUpcoming) {
     if (!nextByWorkshop.has(s.workshopSlug) && s.seatsLeft > 0) nextByWorkshop.set(s.workshopSlug, s.startsAt);
   }
 
-  const relatedPool = workshops.filter((w) => w.slug !== slug && w.status === "live");
+  const relatedPool = allWorkshops.filter((w) => w.slug !== slug && w.status === "live");
   const related = [
     ...relatedPool.filter((w) => w.category === workshop.category),
     ...relatedPool.filter((w) => w.category !== workshop.category),
@@ -76,7 +81,7 @@ export default async function WorkshopPage({ params }: { params: Promise<{ slug:
   const interestMode = workshop.status === "future" ? "vote" : "notify";
 
   const facts: { icon: typeof Clock; label: string }[] = [
-    { icon: CircleDollarSign, label: formatINR(site.pricing.workshopPaise) },
+    { icon: CircleDollarSign, label: formatINR(settings.workshopPricePaise) },
     { icon: Clock, label: `${workshop.durationMin} minutes` },
     { icon: GraduationCap, label: workshop.level },
     { icon: Video, label: "Live online · small group" },
@@ -86,7 +91,7 @@ export default async function WorkshopPage({ params }: { params: Promise<{ slug:
   const bookingBox = (
     <Card className="p-6 sm:p-7">
       <p className="font-mono text-xs uppercase tracking-[0.14em] text-muted">Class price</p>
-      <p className="mt-1 font-display text-3xl font-bold text-ink">{formatINR(site.pricing.workshopPaise)}</p>
+      <p className="mt-1 font-display text-3xl font-bold text-ink">{formatINR(settings.workshopPricePaise)}</p>
       <p className="mt-1 text-sm text-muted">
         {workshop.durationMin} minutes · live online · max {site.defaultCapacity} students
       </p>
@@ -133,7 +138,7 @@ export default async function WorkshopPage({ params }: { params: Promise<{ slug:
 
       <p className="mt-6 flex items-start gap-2 text-xs text-muted">
         <BadgePercent className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-        Attended our previous class? Use the same email at checkout and {site.pricing.returningDiscountPercent}% comes
+        Attended our previous class? Use the same email at checkout and {settings.returningDiscountPercent}% comes
         off automatically.
       </p>
     </Card>
@@ -312,7 +317,7 @@ export default async function WorkshopPage({ params }: { params: Promise<{ slug:
           <h2 className="text-2xl font-bold text-ink">Related workshops</h2>
           <div className="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {related.map((w) => (
-              <WorkshopCard key={w.slug} workshop={w} nextSessionAt={nextByWorkshop.get(w.slug)} />
+              <WorkshopCard key={w.slug} workshop={w} workshopPricePaise={settings.workshopPricePaise} nextSessionAt={nextByWorkshop.get(w.slug)} />
             ))}
           </div>
         </section>

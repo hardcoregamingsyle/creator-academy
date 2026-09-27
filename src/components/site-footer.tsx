@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { site } from "@/lib/site";
+import { activeSocials } from "@/lib/data/socials";
 import { Logo, socialIcons } from "./brand";
 import { Container } from "./ui";
 
@@ -34,9 +35,10 @@ const columns = [
   },
 ];
 
-export function SiteFooter() {
+export async function SiteFooter() {
   const year = new Date().getFullYear();
   const legalName = process.env.NEXT_PUBLIC_LEGAL_NAME;
+  const socials = await activeSocials();
   return (
     <footer className="bg-deep text-on-dark">
       <Container className="py-14 sm:py-16">
@@ -48,29 +50,19 @@ export function SiteFooter() {
               something you made.
             </p>
             <ul className="mt-6 flex items-center gap-2" aria-label="Social media">
-              {site.socials.map((s) => {
-                const Icon = socialIcons[s.label];
+              {socials.map((s) => {
+                const Icon = socialIcons[s.platform as keyof typeof socialIcons];
                 return (
-                  <li key={s.label}>
-                    {s.url ? (
-                      <a
-                        href={s.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex size-10 items-center justify-center rounded-full border border-dark-line text-on-dark hover:bg-dark-surface"
-                        aria-label={`${site.name} on ${s.label}`}
-                      >
-                        <Icon className="size-[18px]" />
-                      </a>
-                    ) : (
-                      <span
-                        className="flex size-10 items-center justify-center rounded-full border border-dark-line text-on-dark-muted"
-                        title={`${s.label} — launching soon`}
-                      >
-                        <Icon className="size-[18px]" />
-                        <span className="sr-only">{s.label} (launching soon)</span>
-                      </span>
-                    )}
+                  <li key={s.id}>
+                    <a
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex size-10 items-center justify-center rounded-full border border-dark-line text-on-dark hover:bg-dark-surface"
+                      aria-label={`${site.name} on ${s.platform}`}
+                    >
+                      <Icon className="size-[18px]" />
+                    </a>
                   </li>
                 );
               })}

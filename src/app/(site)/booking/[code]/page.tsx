@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import type { Workshop } from "@/content/workshops";
 import { getRegistrationByCode, type RegistrationWithSession } from "@/lib/data/registrations";
+import { getSiteSettings } from "@/lib/data/site-settings";
 import { formatDateLong, formatINR, formatTimeRange } from "@/lib/format";
 import { paymentMode, type PaymentMode } from "@/lib/payments";
 import { site, siteUrl } from "@/lib/site";
@@ -48,7 +49,7 @@ function googleCalendarUrl(opts: { title: string; startsAt: string; durationMin:
 
 export default async function BookingConfirmationPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  const reg = await getRegistrationByCode(code);
+  const [reg, settings] = await Promise.all([getRegistrationByCode(code), getSiteSettings()]);
   if (!reg) notFound();
 
   const title = reg.workshop?.title ?? "your workshop";
@@ -80,7 +81,9 @@ export default async function BookingConfirmationPage({ params }: { params: Prom
           </Notice>
         )}
 
-        {reg.status === "paid" && <PaidView reg={reg} title={title} gcalUrl={gcalUrl} />}
+        {reg.status === "paid" && (
+          <PaidView reg={reg} title={title} gcalUrl={gcalUrl} returningDiscountPercent={settings.returningDiscountPercent} />
+        )}
         {reg.status === "pending" && (
           <PendingView reg={reg} title={title} mode={mode} sessionInFuture={sessionInFuture} />
         )}
@@ -94,7 +97,17 @@ export default async function BookingConfirmationPage({ params }: { params: Prom
 
 // ───────────────────────── paid ─────────────────────────
 
-function PaidView({ reg, title, gcalUrl }: { reg: RegistrationWithSession; title: string; gcalUrl: string }) {
+function PaidView({
+  reg,
+  title,
+  gcalUrl,
+  returningDiscountPercent,
+}: {
+  reg: RegistrationWithSession;
+  title: string;
+  gcalUrl: string;
+  returningDiscountPercent: number;
+}) {
   const w: Workshop | undefined = reg.workshop;
   return (
     <div>
@@ -227,7 +240,7 @@ function PaidView({ reg, title, gcalUrl }: { reg: RegistrationWithSession; title
             { icon: Mail, text: "We'll email a short feedback form after class — it takes about 2 minutes." },
             {
               icon: BadgePercent,
-              text: `Attend, and get ${site.pricing.returningDiscountPercent}% off your next class — book with this same email before our next class starts and it's applied automatically.`,
+              text: `Attend, and get ${returningDiscountPercent}% off your next class — book with this same email before our next class starts and it's applied automatically.`,
             },
           ].map((step, i) => (
             <li key={i} className="flex gap-3">

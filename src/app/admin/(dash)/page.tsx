@@ -15,6 +15,8 @@ import {
 import { dashboardStats } from "@/lib/data/misc";
 import { listRegistrations, type RegistrationStatus } from "@/lib/data/registrations";
 import { listSessions } from "@/lib/data/sessions";
+import { getSiteSettings } from "@/lib/data/site-settings";
+import { activeSocials } from "@/lib/data/socials";
 import { formatDateShort, formatINR, formatTime, plural, timeAgo } from "@/lib/format";
 import { emailConfigured } from "@/lib/email";
 import { paymentMode } from "@/lib/payments";
@@ -25,8 +27,6 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Overview" };
 
-const WORKSHOP_PRICE_PAISE = site.pricing.workshopPaise;
-
 const regStatusTone: Record<RegistrationStatus, "success" | "warning" | "danger" | "neutral"> = {
   paid: "success",
   pending: "warning",
@@ -36,18 +36,21 @@ const regStatusTone: Record<RegistrationStatus, "success" | "warning" | "danger"
 };
 
 export default async function AdminOverviewPage() {
-  const [stats, upcoming, recent] = await Promise.all([
+  const [stats, upcoming, recent, settings, linkedSocials] = await Promise.all([
     dashboardStats(),
     listSessions("upcoming"),
     listRegistrations({ limit: 8 }),
+    getSiteSettings(),
+    activeSocials(),
   ]);
   const nextSessions = upcoming.slice(0, 5);
+  const WORKSHOP_PRICE_PAISE = settings.workshopPricePaise;
 
   const checklist: { label: string; ok: boolean }[] = [
     { label: "Razorpay keys are set (live payments)", ok: paymentMode() === "razorpay" },
     { label: "SMTP email sending is set up", ok: emailConfigured() },
     { label: "Legal business name is filled in", ok: !site.legal.businessName.startsWith("[") },
-    { label: "At least one social account is linked", ok: site.socials.some((s) => Boolean(s.url)) },
+    { label: "At least one social account is linked", ok: linkedSocials.length > 0 },
     { label: "SITE_URL points to your real domain", ok: Boolean(process.env.SITE_URL) && !siteUrl.includes("localhost") },
     { label: "At least one upcoming session is scheduled", ok: upcoming.length > 0 },
   ];

@@ -18,12 +18,16 @@ import {
   Users,
   Video,
 } from "lucide-react";
-import { categories, liveWorkshops, workshops } from "@/content/workshops";
-import { homeFaq } from "@/content/faq";
+import { categories } from "@/content/workshops";
+import { getHomeFaq } from "@/content/faq";
+import { liveWorkshops, listWorkshops } from "@/lib/data/workshops";
 import { listPublicTestimonials } from "@/lib/data/feedback";
 import { listUpcomingSessions, type ClassSession } from "@/lib/data/sessions";
+import { activeSocials, type Social } from "@/lib/data/socials";
+import { getSiteSettings } from "@/lib/data/site-settings";
+import { listTrainingDurations, type TrainingDuration } from "@/lib/data/training";
 import { formatDateLong, formatINR, formatTimeRange } from "@/lib/format";
-import { site, training } from "@/lib/site";
+import { site } from "@/lib/site";
 import { CategoryIcon, socialIcons } from "@/components/brand";
 import { ClassTimeline } from "@/components/class-timeline";
 import { FaqList } from "@/components/faq-list";
@@ -34,15 +38,25 @@ import { WorkshopCard } from "@/components/workshop-card";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [upcoming, testimonials] = await Promise.all([listUpcomingSessions(), listPublicTestimonials({ limit: 6 })]);
+  const [upcoming, testimonials, allWorkshops, live, socials, settings, durations, homeFaqItems] = await Promise.all([
+    listUpcomingSessions(),
+    listPublicTestimonials({ limit: 6 }),
+    listWorkshops(),
+    liveWorkshops(),
+    activeSocials(),
+    getSiteSettings(),
+    listTrainingDurations(),
+    getHomeFaq(),
+  ]);
   const next = upcoming.find((s) => s.seatsLeft > 0) ?? upcoming[0] ?? null;
   const nextByWorkshop = new Map<string, string>();
   for (const s of upcoming) if (!nextByWorkshop.has(s.workshopSlug) && s.seatsLeft > 0) nextByWorkshop.set(s.workshopSlug, s.startsAt);
+  const workshopPaise = settings.workshopPricePaise;
 
   return (
     <>
-      <Hero next={next} />
-      <ValueEquation />
+      <Hero next={next} workshopPaise={workshopPaise} />
+      <ValueEquation workshopPaise={workshopPaise} />
 
       {/* ── Explore by skill ── */}
       <Section id="explore">
@@ -53,13 +67,13 @@ export default async function HomePage() {
             description="Every workshop stands on its own — no compulsory course sequence. Choose a category to see what's available."
             action={
               <ButtonLink href="/classes" variant="outline">
-                Browse all {workshops.length} workshops <ArrowRight className="size-4" aria-hidden />
+                Browse all {allWorkshops.length} workshops <ArrowRight className="size-4" aria-hidden />
               </ButtonLink>
             }
           />
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {categories.map((c) => {
-              const inCat = workshops.filter((w) => w.category === c.slug);
+              const inCat = allWorkshops.filter((w) => w.category === c.slug);
               const live = inCat.filter((w) => w.status === "live").length;
               return (
                 <li key={c.slug}>
@@ -114,8 +128,8 @@ export default async function HomePage() {
             description="No vague “learn YouTube” classes. Each one answers a simple question: what will I be able to do after 90 minutes?"
           />
           <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {liveWorkshops.map((w) => (
-              <WorkshopCard key={w.slug} workshop={w} nextSessionAt={nextByWorkshop.get(w.slug)} />
+            {live.map((w) => (
+              <WorkshopCard key={w.slug} workshop={w} workshopPricePaise={workshopPaise} nextSessionAt={nextByWorkshop.get(w.slug)} />
             ))}
           </div>
         </Container>
@@ -146,8 +160,8 @@ export default async function HomePage() {
         </Container>
       </Section>
 
-      <WhyUs />
-      <PersonalTrainingTeaser />
+      <WhyUs workshopPaise={workshopPaise} returningDiscountPercent={settings.returningDiscountPercent} />
+      <PersonalTrainingTeaser durations={durations} />
 
       {/* ── Student feedback ── */}
       <Section>
@@ -204,19 +218,19 @@ export default async function HomePage() {
               All questions <ArrowRight className="size-4" aria-hidden />
             </ButtonLink>
           </div>
-          <FaqList items={homeFaq} />
+          <FaqList items={homeFaqItems} />
         </Container>
       </Section>
 
-      <Socials />
-      <FinalCta />
+      <Socials socials={socials} />
+      <FinalCta workshopPaise={workshopPaise} />
     </>
   );
 }
 
 // ───────────────────────── sections ─────────────────────────
 
-function Hero({ next }: { next: ClassSession | null }) {
+function Hero({ next, workshopPaise }: { next: ClassSession | null; workshopPaise: number }) {
   return (
     <section className="relative overflow-hidden border-b border-line">
       <div
@@ -225,7 +239,7 @@ function Hero({ next }: { next: ClassSession | null }) {
       />
       <Container className="relative grid items-center gap-12 py-14 sm:py-20 lg:grid-cols-[1.15fr_1fr] lg:py-24">
         <div>
-          <Eyebrow className="animate-fade-up">Live creator workshops · {formatINR(site.pricing.workshopPaise)} per class</Eyebrow>
+          <Eyebrow className="animate-fade-up">Live creator workshops · {formatINR(workshopPaise)} per class</Eyebrow>
           <h1 className="mt-5 animate-fade-up text-5xl font-extrabold leading-[0.98] tracking-[-0.035em] [animation-delay:80ms] sm:text-7xl">
             Learn. <span className="marker">Create.</span>
             <br />
@@ -319,9 +333,9 @@ function NextClassCard({ next }: { next: ClassSession | null }) {
   );
 }
 
-function ValueEquation() {
+function ValueEquation({ workshopPaise }: { workshopPaise: number }) {
   const steps = [
-    { big: formatINR(site.pricing.workshopPaise), small: "one class, no subscription" },
+    { big: formatINR(workshopPaise), small: "one class, no subscription" },
     { big: "90 min", small: "live, with an instructor" },
     { big: "1 skill", small: "specific and practical" },
     { big: "1 thing made", small: "you leave with a result" },
@@ -387,16 +401,16 @@ function HowItWorks() {
   );
 }
 
-function WhyUs() {
+function WhyUs({ workshopPaise, returningDiscountPercent }: { workshopPaise: number; returningDiscountPercent: number }) {
   const reasons = [
-    { icon: CircleDollarSign, title: `${formatINR(site.pricing.workshopPaise)} per class`, text: "A low-risk way to learn one skill properly. No subscriptions or bundles." },
+    { icon: CircleDollarSign, title: `${formatINR(workshopPaise)} per class`, text: "A low-risk way to learn one skill properly. No subscriptions or bundles." },
     { icon: Radio, title: "Live, not pre-recorded", text: "Watch it done in real time and get your questions answered." },
     { icon: Hammer, title: "Practical projects", text: "You don't just take notes — you finish something you can use." },
     { icon: Users, title: "Small groups", text: `A maximum of ${site.defaultCapacity} students, so there's room to ask questions.` },
     { icon: GraduationCap, title: "Beginner-friendly", text: "Fundamentals classes assume no prior experience." },
     { icon: LayoutGrid, title: "Flexible catalogue", text: "Open-entry workshops. Take exactly what you need, in any order." },
     { icon: UserRound, title: "Personal training", text: "Need deeper help? Book a 1:1 session on your own project." },
-    { icon: BadgePercent, title: `${site.pricing.returningDiscountPercent}% off your next class`, text: "Attended the previous class? Your next one is cheaper — automatically." },
+    { icon: BadgePercent, title: `${returningDiscountPercent}% off your next class`, text: "Attended the previous class? Your next one is cheaper — automatically." },
   ];
   return (
     <Section tone="dark">
@@ -421,7 +435,7 @@ function WhyUs() {
   );
 }
 
-function PersonalTrainingTeaser() {
+function PersonalTrainingTeaser({ durations }: { durations: TrainingDuration[] }) {
   return (
     <Section>
       <Container>
@@ -446,7 +460,7 @@ function PersonalTrainingTeaser() {
             </ButtonLink>
           </div>
           <ul className="grid content-center gap-3 bg-paper p-7 sm:p-10">
-            {training.durations.map((d) => (
+            {durations.map((d) => (
               <li key={d.minutes} className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-surface p-5">
                 <div>
                   <p className="font-display text-lg font-bold">
@@ -464,8 +478,8 @@ function PersonalTrainingTeaser() {
   );
 }
 
-function Socials() {
-  const live = site.socials.some((s) => s.url);
+function Socials({ socials }: { socials: Social[] }) {
+  const live = socials.length > 0;
   return (
     <Section className="!pb-0">
       <Container>
@@ -482,33 +496,27 @@ function Socials() {
             </p>
           </div>
           <ul className="grid w-full shrink-0 grid-cols-1 gap-3 sm:grid-cols-3 lg:w-auto">
-            {site.socials.map((s) => {
-              const Icon = socialIcons[s.label];
+            {socials.map((s) => {
+              const Icon = socialIcons[s.platform as keyof typeof socialIcons];
               const inner = (
                 <>
                   <Icon className="size-5" />
                   <span>
-                    <span className="block font-semibold">{s.label}</span>
-                    <span className="block text-xs text-muted">{s.url ? s.handle || "Follow" : "Launching soon"}</span>
+                    <span className="block font-semibold">{s.platform}</span>
+                    <span className="block text-xs text-muted">{s.handle || "Follow"}</span>
                   </span>
                 </>
               );
               return (
-                <li key={s.label}>
-                  {s.url ? (
-                    <a
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3 text-ink hover:border-ink"
-                    >
-                      {inner}
-                    </a>
-                  ) : (
-                    <span className="flex items-center gap-3 rounded-2xl border border-line bg-surface/70 px-4 py-3 text-ink">
-                      {inner}
-                    </span>
-                  )}
+                <li key={s.id}>
+                  <a
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3 text-ink hover:border-ink"
+                  >
+                    {inner}
+                  </a>
                 </li>
               );
             })}
@@ -519,7 +527,7 @@ function Socials() {
   );
 }
 
-function FinalCta() {
+function FinalCta({ workshopPaise }: { workshopPaise: number }) {
   return (
     <Section>
       <Container className="text-center">
@@ -528,7 +536,7 @@ function FinalCta() {
           Pick one skill. Spend 90 minutes. <span className="marker">Make something.</span>
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-lg text-muted">
-          Live weekend workshops for {formatINR(site.pricing.workshopPaise)}. Beginner-friendly, project-based, no
+          Live weekend workshops for {formatINR(workshopPaise)}. Beginner-friendly, project-based, no
           prerequisites.
         </p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">

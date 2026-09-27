@@ -1,5 +1,5 @@
 import { execute, newId, nowIso, query } from "@/lib/db";
-import { getWorkshop, workshops } from "@/content/workshops";
+import { getWorkshop, listWorkshops } from "@/lib/data/workshops";
 import { normaliseEmail } from "./registrations";
 
 // ───────────────────────── workshop interest / demand ─────────────────────────
@@ -22,7 +22,7 @@ export async function registerInterest(input: {
   name?: string | null;
   note?: string | null;
 }): Promise<{ ok: true; alreadyRegistered: boolean } | { ok: false; error: string }> {
-  if (!getWorkshop(input.workshopSlug)) return { ok: false, error: "Unknown workshop." };
+  if (!(await getWorkshop(input.workshopSlug))) return { ok: false, error: "Unknown workshop." };
   const changed = await execute(
     `INSERT OR IGNORE INTO interest (id, workshop_slug, name, email, note, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
     [
@@ -41,15 +41,17 @@ export async function listInterest(workshopSlug?: string): Promise<InterestEntry
   const rows = workshopSlug
     ? await query<Record<string, string | null>>(`SELECT * FROM interest WHERE workshop_slug = ? ORDER BY created_at DESC`, [workshopSlug])
     : await query<Record<string, string | null>>(`SELECT * FROM interest ORDER BY created_at DESC`);
-  return rows.map((r) => ({
-    id: r.id as string,
-    workshopSlug: r.workshop_slug as string,
-    workshopTitle: getWorkshop(r.workshop_slug as string)?.title ?? (r.workshop_slug as string),
-    name: r.name,
-    email: r.email as string,
-    note: r.note,
-    createdAt: r.created_at as string,
-  }));
+  return Promise.all(
+    rows.map(async (r) => ({
+      id: r.id as string,
+      workshopSlug: r.workshop_slug as string,
+      workshopTitle: (await getWorkshop(r.workshop_slug as string))?.title ?? (r.workshop_slug as string),
+      name: r.name,
+      email: r.email as string,
+      note: r.note,
+      createdAt: r.created_at as string,
+    })),
+  );
 }
 
 /** Interest count per workshop, highest first (includes workshops with 0). */
@@ -58,7 +60,8 @@ export async function interestCounts(): Promise<{ workshopSlug: string; workshop
     `SELECT workshop_slug, COUNT(*) AS n FROM interest GROUP BY workshop_slug`,
   );
   const counts = new Map(rows.map((r) => [r.workshop_slug, Number(r.n)]));
-  return workshops
+  const all = await listWorkshops();
+  return all
     .map((w) => ({ workshopSlug: w.slug, workshopTitle: w.title, status: w.status, count: counts.get(w.slug) ?? 0 }))
     .sort((a, b) => b.count - a.count);
 }

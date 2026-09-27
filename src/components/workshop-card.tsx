@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ArrowUpRight, CalendarDays, Check } from "lucide-react";
 import { getCategory, type Workshop } from "@/content/workshops";
 import { formatDateShort, formatINR, formatTime } from "@/lib/format";
-import { site } from "@/lib/site";
 import { CategoryIcon } from "./brand";
 import { Badge, cn } from "./ui";
 
@@ -18,10 +17,12 @@ export function WorkshopStatusBadge({ status }: { status: Workshop["status"] }) 
  */
 export function WorkshopCard({
   workshop,
+  workshopPricePaise,
   nextSessionAt,
   className,
 }: {
   workshop: Workshop;
+  workshopPricePaise: number;
   /** ISO start time of the next bookable session, if any. */
   nextSessionAt?: string | null;
   className?: string;
@@ -60,7 +61,7 @@ export function WorkshopCard({
         <div className="text-sm text-muted">
           {workshop.status === "live" ? (
             <>
-              <span className="font-display text-lg font-bold text-ink">{formatINR(site.pricing.workshopPaise)}</span>
+              <span className="font-display text-lg font-bold text-ink">{formatINR(workshopPricePaise)}</span>
               <span className="mx-1.5">·</span>
               {workshop.durationMin} min live
               {nextSessionAt ? (

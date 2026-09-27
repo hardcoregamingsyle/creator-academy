@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CalendarDays, UserRound } from "lucide-react";
-import { categories, workshops, type Workshop } from "@/content/workshops";
+import { categories, type Workshop } from "@/content/workshops";
+import { listWorkshops } from "@/lib/data/workshops";
 import { listUpcomingSessions } from "@/lib/data/sessions";
+import { getSiteSettings } from "@/lib/data/site-settings";
 import { formatINR } from "@/lib/format";
-import { site } from "@/lib/site";
 import { CategoryIcon } from "@/components/brand";
 import { WorkshopCard } from "@/components/workshop-card";
 import { ButtonLink, Container, Eyebrow, Notice, cn } from "@/components/ui";
@@ -22,12 +23,17 @@ export default async function ClassesPage({
   const activeCategory = categories.find((c) => c.slug === categoryParam)?.slug;
   const activeCategoryMeta = activeCategory ? categories.find((c) => c.slug === activeCategory) : null;
 
-  const filtered: Workshop[] = activeCategory ? workshops.filter((w) => w.category === activeCategory) : workshops;
+  const [allWorkshops, settings, upcoming] = await Promise.all([
+    listWorkshops(),
+    getSiteSettings(),
+    listUpcomingSessions(),
+  ]);
+
+  const filtered: Workshop[] = activeCategory ? allWorkshops.filter((w) => w.category === activeCategory) : allWorkshops;
   const live = filtered.filter((w) => w.status === "live");
   const planned = filtered.filter((w) => w.status === "planned");
   const future = filtered.filter((w) => w.status === "future");
 
-  const upcoming = await listUpcomingSessions();
   const nextByWorkshop = new Map<string, string>();
   for (const s of upcoming) {
     if (!nextByWorkshop.has(s.workshopSlug) && s.seatsLeft > 0) nextByWorkshop.set(s.workshopSlug, s.startsAt);
@@ -39,7 +45,7 @@ export default async function ClassesPage({
       <h1 className="mt-3 text-3xl font-bold sm:text-4xl">Pick exactly the skill you want</h1>
       <p className="mt-4 max-w-2xl text-lg text-muted">
         Every workshop below is standalone and open-entry — there&apos;s no course to complete first and no fixed
-        order. Join any class for {formatINR(site.pricing.workshopPaise)}, spend 90 minutes live with an instructor,
+        order. Join any class for {formatINR(settings.workshopPricePaise)}, spend 90 minutes live with an instructor,
         and leave with something finished.
       </p>
 
@@ -72,6 +78,7 @@ export default async function ClassesPage({
           description="Scheduled and ready to join."
           workshops={live}
           nextByWorkshop={nextByWorkshop}
+          workshopPricePaise={settings.workshopPricePaise}
           emptyNote={
             activeCategoryMeta && (
               <Notice tone="info" title={`No ${activeCategoryMeta.name} classes are open for booking yet`}>
@@ -87,12 +94,14 @@ export default async function ClassesPage({
           description="The outline is ready — these will open for booking once a date is scheduled."
           workshops={planned}
           nextByWorkshop={nextByWorkshop}
+          workshopPricePaise={settings.workshopPricePaise}
         />
         <WorkshopGroup
           title="On the roadmap"
           description="Planned, but not yet scheduled. Vote on a class page to help us prioritise it."
           workshops={future}
           nextByWorkshop={nextByWorkshop}
+          workshopPricePaise={settings.workshopPricePaise}
         />
       </div>
 
@@ -141,12 +150,14 @@ function WorkshopGroup({
   description,
   workshops: list,
   nextByWorkshop,
+  workshopPricePaise,
   emptyNote,
 }: {
   title: string;
   description: string;
   workshops: Workshop[];
   nextByWorkshop: Map<string, string>;
+  workshopPricePaise: number;
   emptyNote?: React.ReactNode;
 }) {
   if (list.length === 0) return emptyNote ? <section>{emptyNote}</section> : null;
@@ -158,7 +169,7 @@ function WorkshopGroup({
       </div>
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
         {list.map((w) => (
-          <WorkshopCard key={w.slug} workshop={w} nextSessionAt={nextByWorkshop.get(w.slug)} />
+          <WorkshopCard key={w.slug} workshop={w} workshopPricePaise={workshopPricePaise} nextSessionAt={nextByWorkshop.get(w.slug)} />
         ))}
       </div>
     </section>

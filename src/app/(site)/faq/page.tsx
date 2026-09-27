@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, MessageCircleQuestion } from "lucide-react";
-import { faqGroups } from "@/content/faq";
+import { getFaqGroups } from "@/content/faq";
 import { site } from "@/lib/site";
 import { ButtonLink, Container, Eyebrow } from "@/components/ui";
 import { FaqList } from "@/components/faq-list";
@@ -18,7 +18,8 @@ function slugify(title: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-export default function FaqPage() {
+export default async function FaqPage() {
+  const faqGroups = await getFaqGroups();
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",

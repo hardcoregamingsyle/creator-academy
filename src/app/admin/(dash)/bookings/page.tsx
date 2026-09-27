@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Download, Search } from "lucide-react";
 import { requireAdmin } from "@/lib/auth";
 import { listRegistrations, type RegistrationStatus, type RegistrationWithSession } from "@/lib/data/registrations";
+import { getSiteSettings } from "@/lib/data/site-settings";
 import { formatDateShort, formatINR, formatTime, timeAgo } from "@/lib/format";
 import { site } from "@/lib/site";
 import { Badge, Button, Card, Input, cn } from "@/components/ui";
@@ -51,9 +52,10 @@ export default async function BookingsPage({
   const { q = "", status = "all" } = await searchParams;
   const statusFilter = (STATUS_FILTERS.some((s) => s.value === status) ? status : "all") as RegistrationStatus | "all";
 
-  const [all, filtered] = await Promise.all([
+  const [all, filtered, settings] = await Promise.all([
     listRegistrations({}),
     listRegistrations({ search: q || undefined, status: statusFilter }),
+    getSiteSettings(),
   ]);
 
   const totalPaidPaise = all.filter((r) => r.status === "paid").reduce((sum, r) => sum + r.amountPaise, 0);
@@ -165,7 +167,7 @@ export default async function BookingsPage({
                     <p className="font-semibold text-ink">{formatINR(r.amountPaise)}</p>
                     {r.discountPaise > 0 && (
                       <Badge tone="accent" className="mt-1">
-                        {site.pricing.returningDiscountPercent}% returning
+                        {settings.returningDiscountPercent}% returning
                       </Badge>
                     )}
                   </td>

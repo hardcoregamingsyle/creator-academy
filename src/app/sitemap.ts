@@ -1,12 +1,13 @@
 import type { MetadataRoute } from "next";
 import { siteUrl } from "@/lib/site";
-import { workshops } from "@/content/workshops";
+import { listWorkshops } from "@/lib/data/workshops";
 
 const POLICY_SLUGS = ["terms", "privacy", "refunds", "delivery"] as const;
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const lastModified = new Date();
   const staticPaths = ["", "/classes", "/monthly-pass", "/schedule", "/personal-training", "/faq", "/about", "/contact"];
+  const workshops = await listWorkshops();
 
   return [
     ...staticPaths.map((path) => ({ url: `${siteUrl}${path}`, lastModified })),

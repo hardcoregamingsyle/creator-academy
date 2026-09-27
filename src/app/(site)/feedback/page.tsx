@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { getRegistrationByCode } from "@/lib/data/registrations";
+import { liveWorkshops } from "@/lib/data/workshops";
+import { getSiteSettings } from "@/lib/data/site-settings";
 import { formatDateLong } from "@/lib/format";
-import { liveWorkshops } from "@/content/workshops";
 import { site } from "@/lib/site";
 import { Container, Eyebrow, Notice } from "@/components/ui";
 import { FeedbackForm } from "./feedback-form";
@@ -16,7 +17,11 @@ export const metadata: Metadata = {
 export default async function FeedbackPage({ searchParams }: { searchParams: Promise<{ code?: string }> }) {
   const { code: codeParam } = await searchParams;
   const code = codeParam?.trim() || null;
-  const registration = code ? await getRegistrationByCode(code) : null;
+  const [registration, live, settings] = await Promise.all([
+    code ? getRegistrationByCode(code) : Promise.resolve(null),
+    liveWorkshops(),
+    getSiteSettings(),
+  ]);
   const lockedWorkshop = registration?.workshop ? { slug: registration.workshopSlug, title: registration.workshop.title } : null;
 
   return (
@@ -44,7 +49,8 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
           <FeedbackForm
             initialCode={code ?? ""}
             lockedWorkshop={lockedWorkshop}
-            liveWorkshops={liveWorkshops.map((w) => ({ slug: w.slug, title: w.title }))}
+            liveWorkshops={live.map((w) => ({ slug: w.slug, title: w.title }))}
+            returningDiscountPercent={settings.returningDiscountPercent}
           />
         </div>
       </div>

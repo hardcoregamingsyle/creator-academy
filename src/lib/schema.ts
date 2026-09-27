@@ -166,6 +166,26 @@ CREATE TABLE IF NOT EXISTS training_topics (
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
+-- Top-level pricing knobs and social links — formerly hardcoded in
+-- src/lib/site.ts, now editable from /admin/pricing and /admin/socials.
+-- site_settings is a singleton (always id = 'singleton').
+
+CREATE TABLE IF NOT EXISTS site_settings (
+  id                          TEXT PRIMARY KEY DEFAULT 'singleton',
+  workshop_price_paise        INTEGER NOT NULL,
+  returning_discount_percent  INTEGER NOT NULL,
+  monthly_pass_price_paise    INTEGER NOT NULL,
+  updated_at                  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS socials (
+  id         TEXT PRIMARY KEY,
+  platform   TEXT NOT NULL UNIQUE,
+  handle     TEXT NOT NULL DEFAULT '',
+  url        TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
 -- ───────────────────────── student accounts (auth) ─────────────────────────
 -- Separate from the single shared admin password. A student account is
 -- created the first time someone verifies a Google sign-in or an email OTP —

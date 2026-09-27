@@ -1,7 +1,8 @@
 import { execute, newCode, newId, nowIso, query, queryOne } from "@/lib/db";
 import { istMonthKey } from "@/lib/format";
-import { site } from "@/lib/site";
-import { getWorkshop, type Workshop } from "@/content/workshops";
+import { getSiteSettings } from "@/lib/data/site-settings";
+import { getWorkshop } from "@/lib/data/workshops";
+import { type Workshop } from "@/content/workshops";
 import { hasActivePass } from "./monthly-pass";
 import { getPreviousSession, getSession, holdCutoffIso, isBookable, type ClassSession } from "./sessions";
 
@@ -90,7 +91,7 @@ function mapReg(r: RegRow): Registration {
   };
 }
 
-function mapRegWithSession(r: RegWithSessionRow): RegistrationWithSession {
+async function mapRegWithSession(r: RegWithSessionRow): Promise<RegistrationWithSession> {
   return {
     ...mapReg(r),
     sessionStartsAt: r.s_starts_at,
@@ -98,7 +99,7 @@ function mapRegWithSession(r: RegWithSessionRow): RegistrationWithSession {
     sessionStatus: r.s_status,
     meetingLink: r.s_meeting_link,
     workshopSlug: r.s_workshop_slug,
-    workshop: getWorkshop(r.s_workshop_slug),
+    workshop: (await getWorkshop(r.s_workshop_slug)) ?? undefined,
   };
 }
 
@@ -140,9 +141,10 @@ export async function checkReturningDiscount(emailRaw: string): Promise<Discount
   );
   if (used && Number(used.n) > 0) return { eligible: false };
 
+  const settings = await getSiteSettings();
   return {
     eligible: true,
-    percent: site.pricing.returningDiscountPercent,
+    percent: settings.returningDiscountPercent,
     sourceSessionId: prev.id,
     sourceWorkshopTitle: prev.workshop?.title ?? "your previous class",
   };
@@ -292,17 +294,17 @@ export async function renewSeatHold(id: string): Promise<boolean> {
 
 export async function getRegistrationByCode(code: string): Promise<RegistrationWithSession | null> {
   const row = await queryOne<RegWithSessionRow>(`${SELECT_WITH_SESSION} WHERE r.code = ?`, [code.trim().toUpperCase()]);
-  return row ? mapRegWithSession(row) : null;
+  return row ? await mapRegWithSession(row) : null;
 }
 
 export async function getRegistrationById(id: string): Promise<RegistrationWithSession | null> {
   const row = await queryOne<RegWithSessionRow>(`${SELECT_WITH_SESSION} WHERE r.id = ?`, [id]);
-  return row ? mapRegWithSession(row) : null;
+  return row ? await mapRegWithSession(row) : null;
 }
 
 export async function getRegistrationByOrderId(orderId: string): Promise<RegistrationWithSession | null> {
   const row = await queryOne<RegWithSessionRow>(`${SELECT_WITH_SESSION} WHERE r.provider_order_id = ?`, [orderId]);
-  return row ? mapRegWithSession(row) : null;
+  return row ? await mapRegWithSession(row) : null;
 }
 
 export async function listRegistrations(
@@ -331,7 +333,7 @@ export async function listRegistrations(
     args.push(opts.limit);
   }
   const rows = await query<RegWithSessionRow>(sql, args);
-  return rows.map(mapRegWithSession);
+  return Promise.all(rows.map(mapRegWithSession));
 }
 
 /** All registrations (any status) made with an email — for the student's own history. */
@@ -340,7 +342,7 @@ export async function listRegistrationsByEmail(email: string): Promise<Registrat
     `${SELECT_WITH_SESSION} WHERE r.email = ? ORDER BY s.starts_at DESC`,
     [normaliseEmail(email)],
   );
-  return rows.map(mapRegWithSession);
+  return Promise.all(rows.map(mapRegWithSession));
 }
 
 // ───────────────────────── mutations ─────────────────────────

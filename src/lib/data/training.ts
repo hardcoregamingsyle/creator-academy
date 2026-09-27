@@ -94,8 +94,119 @@ const SELECT_BOOKING = `
 /** SQL condition for a booking that currently occupies its slot. */
 const ACTIVE_BOOKING = `(b.status IN ('paid', 'completed') OR (b.status = 'pending' AND b.created_at > ?))`;
 
-export function priceForDuration(minutes: number): number | null {
-  return training.durations.find((d) => d.minutes === minutes)?.paise ?? null;
+// ───────────────────────── pricing tiers & topics ─────────────────────────
+// Editable from /admin/pricing. Seeded once from the static defaults in
+// src/lib/site.ts the first time either table is read.
+
+export type TrainingDuration = { id: string; minutes: number; label: string; blurb: string; paise: number; sortOrder: number };
+export type TrainingTopic = { id: string; label: string; sortOrder: number };
+
+// INSERT OR IGNORE in both loops below (keyed on the UNIQUE minutes/label
+// columns) makes this safe if two requests both see an empty table and race
+// to seed it concurrently.
+async function ensureTrainingConfigSeeded(): Promise<void> {
+  const rows = await query<{ n: number }>(`SELECT COUNT(*) AS n FROM training_durations`);
+  if (Number(rows[0]?.n ?? 0) === 0) {
+    for (let i = 0; i < training.durations.length; i++) {
+      const d = training.durations[i];
+      await execute(
+        `INSERT OR IGNORE INTO training_durations (id, minutes, label, blurb, price_paise, sort_order) VALUES (?, ?, ?, ?, ?, ?)`,
+        [newId(), d.minutes, d.label, d.blurb, d.paise, i * 10],
+      );
+    }
+  }
+  const topicRows = await query<{ n: number }>(`SELECT COUNT(*) AS n FROM training_topics`);
+  if (Number(topicRows[0]?.n ?? 0) === 0) {
+    for (let i = 0; i < training.topics.length; i++) {
+      await execute(`INSERT OR IGNORE INTO training_topics (id, label, sort_order) VALUES (?, ?, ?)`, [
+        newId(),
+        training.topics[i],
+        i * 10,
+      ]);
+    }
+  }
+}
+
+export async function listTrainingDurations(): Promise<TrainingDuration[]> {
+  await ensureTrainingConfigSeeded();
+  const rows = await query<{ id: string; minutes: number; label: string; blurb: string; price_paise: number; sort_order: number }>(
+    `SELECT * FROM training_durations ORDER BY sort_order ASC`,
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    minutes: Number(r.minutes),
+    label: r.label,
+    blurb: r.blurb,
+    paise: Number(r.price_paise),
+    sortOrder: Number(r.sort_order),
+  }));
+}
+
+export async function createTrainingDuration(input: {
+  minutes: number;
+  label: string;
+  blurb: string;
+  paise: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  await ensureTrainingConfigSeeded();
+  const existing = await queryOne(`SELECT id FROM training_durations WHERE minutes = ?`, [input.minutes]);
+  if (existing) return { ok: false, error: "A duration with this many minutes already exists." };
+  const rows = await query<{ max_order: number | null }>(`SELECT MAX(sort_order) AS max_order FROM training_durations`);
+  await execute(
+    `INSERT INTO training_durations (id, minutes, label, blurb, price_paise, sort_order) VALUES (?, ?, ?, ?, ?, ?)`,
+    [newId(), input.minutes, input.label.trim(), input.blurb.trim(), input.paise, (rows[0]?.max_order ?? -10) + 10],
+  );
+  return { ok: true };
+}
+
+export async function updateTrainingDuration(
+  id: string,
+  input: { minutes: number; label: string; blurb: string; paise: number },
+): Promise<{ ok: boolean; error?: string }> {
+  const clash = await queryOne(`SELECT id FROM training_durations WHERE minutes = ? AND id != ?`, [input.minutes, id]);
+  if (clash) return { ok: false, error: "A duration with this many minutes already exists." };
+  await execute(`UPDATE training_durations SET minutes = ?, label = ?, blurb = ?, price_paise = ? WHERE id = ?`, [
+    input.minutes,
+    input.label.trim(),
+    input.blurb.trim(),
+    input.paise,
+    id,
+  ]);
+  return { ok: true };
+}
+
+export async function deleteTrainingDuration(id: string): Promise<void> {
+  await execute(`DELETE FROM training_durations WHERE id = ?`, [id]);
+}
+
+export async function listTrainingTopics(): Promise<TrainingTopic[]> {
+  await ensureTrainingConfigSeeded();
+  const rows = await query<{ id: string; label: string; sort_order: number }>(
+    `SELECT * FROM training_topics ORDER BY sort_order ASC`,
+  );
+  return rows.map((r) => ({ id: r.id, label: r.label, sortOrder: Number(r.sort_order) }));
+}
+
+export async function createTrainingTopic(label: string): Promise<{ ok: boolean; error?: string }> {
+  await ensureTrainingConfigSeeded();
+  const existing = await queryOne(`SELECT id FROM training_topics WHERE label = ?`, [label.trim()]);
+  if (existing) return { ok: false, error: "This topic already exists." };
+  const rows = await query<{ max_order: number | null }>(`SELECT MAX(sort_order) AS max_order FROM training_topics`);
+  await execute(`INSERT INTO training_topics (id, label, sort_order) VALUES (?, ?, ?)`, [
+    newId(),
+    label.trim(),
+    (rows[0]?.max_order ?? -10) + 10,
+  ]);
+  return { ok: true };
+}
+
+export async function deleteTrainingTopic(id: string): Promise<void> {
+  await execute(`DELETE FROM training_topics WHERE id = ?`, [id]);
+}
+
+export async function priceForDuration(minutes: number): Promise<number | null> {
+  const durations = await listTrainingDurations();
+  return durations.find((d) => d.minutes === minutes)?.paise ?? null;
 }
 
 // ───────────────────────── slots ─────────────────────────
@@ -156,8 +267,9 @@ export async function listAvailableSlotsByDuration(): Promise<Record<number, { i
     (s) => s.isOpen && !s.bookingCode && new Date(s.startsAt).getTime() > minLead,
   );
   const busy = await busyIntervals();
+  const durations = await listTrainingDurations();
   const result: Record<number, { id: string; startsAt: string }[]> = {};
-  for (const d of training.durations) {
+  for (const d of durations) {
     result[d.minutes] = slots
       .filter((s) => {
         const start = new Date(s.startsAt).getTime();
@@ -210,7 +322,7 @@ export type TrainingBookingInput = {
 export type TrainingBookingResult = { ok: true; booking: TrainingBooking } | { ok: false; error: string };
 
 export async function createPendingTrainingBooking(input: TrainingBookingInput): Promise<TrainingBookingResult> {
-  const price = priceForDuration(input.durationMin);
+  const price = await priceForDuration(input.durationMin);
   if (!price) return { ok: false, error: "Please choose a valid session length." };
 
   const available = await listAvailableSlotsByDuration();

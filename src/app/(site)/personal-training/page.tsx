@@ -8,11 +8,12 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import { faqGroups } from "@/content/faq";
-import { listAvailableSlotsByDuration } from "@/lib/data/training";
+import { getFaqGroups } from "@/content/faq";
+import { listAvailableSlotsByDuration, listTrainingDurations, listTrainingTopics } from "@/lib/data/training";
+import { getSiteSettings } from "@/lib/data/site-settings";
 import { formatINR } from "@/lib/format";
 import { paymentMode } from "@/lib/payments";
-import { site, training } from "@/lib/site";
+import { site } from "@/lib/site";
 import { FaqList } from "@/components/faq-list";
 import { ButtonLink, Container, EmptyState, Eyebrow, Section, SectionHeading, Notice } from "@/components/ui";
 import { TrainingForm } from "./training-form";
@@ -32,8 +33,16 @@ const howItWorks = [
 ];
 
 export default async function PersonalTrainingPage() {
-  const [slotsByDuration, mode] = await Promise.all([listAvailableSlotsByDuration(), Promise.resolve(paymentMode())]);
-  const anySlots = training.durations.some((d) => (slotsByDuration[d.minutes]?.length ?? 0) > 0);
+  const [slotsByDuration, mode, durations, topics, settings, faqGroups] = await Promise.all([
+    listAvailableSlotsByDuration(),
+    Promise.resolve(paymentMode()),
+    listTrainingDurations(),
+    listTrainingTopics(),
+    getSiteSettings(),
+    getFaqGroups(),
+  ]);
+  const workshopPaise = settings.workshopPricePaise;
+  const anySlots = durations.some((d) => (slotsByDuration[d.minutes]?.length ?? 0) > 0);
   const trainingFaq = faqGroups.find((g) => g.title === "Personal training");
 
   return (
@@ -54,12 +63,12 @@ export default async function PersonalTrainingPage() {
                 Book a session <ArrowDown className="size-4" aria-hidden />
               </ButtonLink>
               <ButtonLink href="/classes" variant="outline" size="lg">
-                Or join a {formatINR(site.pricing.workshopPaise)} group class
+                Or join a {formatINR(workshopPaise)} group class
               </ButtonLink>
             </div>
           </div>
           <ul className="grid gap-3">
-            {training.durations.map((d) => (
+            {durations.map((d) => (
               <li key={d.minutes} className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-surface p-5 shadow-card">
                 <div>
                   <p className="font-display text-lg font-bold">
@@ -105,7 +114,7 @@ export default async function PersonalTrainingPage() {
               to arrange a session.
             </Notice>
           ) : anySlots ? (
-            <TrainingForm slotsByDuration={slotsByDuration} demoMode={mode === "demo"} />
+            <TrainingForm slotsByDuration={slotsByDuration} demoMode={mode === "demo"} durations={durations} topics={topics} />
           ) : (
             <EmptyState
               icon={<CalendarClock className="size-5" aria-hidden />}

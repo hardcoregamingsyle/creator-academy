@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
-import { getWorkshop } from "@/content/workshops";
+import { getWorkshop } from "@/lib/data/workshops";
+import { getSiteSettings } from "@/lib/data/site-settings";
 import { fromISTInputs } from "@/lib/format";
 import { site } from "@/lib/site";
 import { isEmail, normalisePhone, str } from "@/lib/validate";
@@ -72,7 +73,7 @@ export async function createSessionAction(_prev: ActionResult | null, formData: 
   const meetingLinkRaw = str(formData.get("meetingLink"), 500);
   const notes = str(formData.get("notes"), 2000);
 
-  const workshop = getWorkshop(workshopSlug);
+  const workshop = await getWorkshop(workshopSlug);
   if (!workshop || (workshop.status !== "live" && workshop.status !== "planned")) {
     return { ok: false, message: "Please choose a valid workshop." };
   }
@@ -88,7 +89,7 @@ export async function createSessionAction(_prev: ActionResult | null, formData: 
   const capacity = capacityRaw ? parseCapacity(capacityRaw) : site.defaultCapacity;
   if (capacity === null) return { ok: false, message: "Please enter a valid capacity." };
 
-  const price = priceRaw ? parseRupeesToPaise(priceRaw) : site.pricing.workshopPaise;
+  const price = priceRaw ? parseRupeesToPaise(priceRaw) : (await getSiteSettings()).workshopPricePaise;
   if (price === null) return { ok: false, message: "Please enter a valid price." };
 
   const link = parseMeetingLink(meetingLinkRaw);
@@ -299,7 +300,7 @@ export async function sendFeedbackRequestAction(_prev: ActionResult | null, form
 
   let sent = 0;
   for (const r of regs) {
-    const res = await sendEmail(feedbackRequestEmail(r));
+    const res = await sendEmail(await feedbackRequestEmail(r));
     if (res.ok) sent++;
   }
 

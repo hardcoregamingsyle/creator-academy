@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { listPasses, passRevenuePaise, passesOnSale, type MonthlyPassStatus } from "@/lib/data/monthly-pass";
+import { getSiteSettings } from "@/lib/data/site-settings";
 import { formatDateShort, formatINR, monthLabel, timeAgo } from "@/lib/format";
-import { site } from "@/lib/site";
 import { Badge, Card } from "@/components/ui";
 import { ActionForm, ConfirmButton } from "../admin-ui";
 import { setPassStatusAction } from "./actions";
@@ -21,7 +21,12 @@ const statusTone = {
 
 export default async function AdminPassesPage() {
   await requireAdmin();
-  const [passes, revenue, onSale] = await Promise.all([listPasses({}), passRevenuePaise(), Promise.resolve(passesOnSale())]);
+  const [passes, revenue, onSale, settings] = await Promise.all([
+    listPasses({}),
+    passRevenuePaise(),
+    Promise.resolve(passesOnSale()),
+    getSiteSettings(),
+  ]);
 
   const paidCount = passes.filter((p) => p.status === "paid").length;
   const currentMonthCount = passes.filter((p) => p.status === "paid" && p.monthKey === onSale[0]?.monthKey).length;
@@ -30,8 +35,8 @@ export default async function AdminPassesPage() {
     <div>
       <h1 className="text-3xl font-bold sm:text-4xl">Monthly Pass</h1>
       <p className="mt-2 text-muted">
-        Current price: {formatINR(site.pricing.monthlyPassPaise)}/month — change it in{" "}
-        <code className="font-mono text-xs">src/lib/site.ts</code> (site.pricing.monthlyPassPaise).
+        Current price: {formatINR(settings.monthlyPassPricePaise)}/month — change it in{" "}
+        <code className="font-mono text-xs">/admin/pricing</code>.
       </p>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-3">

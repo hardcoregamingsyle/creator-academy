@@ -13,9 +13,12 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { site, training } from "@/lib/site";
+import { site } from "@/lib/site";
 import { formatINR } from "@/lib/format";
-import { classStructure, workshops } from "@/content/workshops";
+import { classStructure } from "@/content/workshops";
+import { listWorkshops } from "@/lib/data/workshops";
+import { getSiteSettings } from "@/lib/data/site-settings";
+import { listTrainingDurations, listTrainingTopics } from "@/lib/data/training";
 import { ButtonLink, Container, Eyebrow, Section, SectionHeading } from "@/components/ui";
 import { ClassTimeline } from "@/components/class-timeline";
 
@@ -42,7 +45,14 @@ const honestyCommitments = [
   },
 ];
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const [allWorkshops, settings, durations, topics] = await Promise.all([
+    listWorkshops(),
+    getSiteSettings(),
+    listTrainingDurations(),
+    listTrainingTopics(),
+  ]);
+
   return (
     <>
       <Container className="py-10 sm:py-14">
@@ -126,7 +136,7 @@ export default function AboutPage() {
             <h2 className="mt-3 text-3xl font-bold sm:text-4xl">Pick any class, in any order</h2>
             <p className="mt-4 text-muted">
               There&apos;s no compulsory sequence and no bundle you have to buy through. Every one of our{" "}
-              {workshops.length} workshops stands on its own — take Thumbnail Fundamentals without ever touching an
+              {allWorkshops.length} workshops stands on its own — take Thumbnail Fundamentals without ever touching an
               editing class, or come back for Voice &amp; Audio months after your first session with us.
             </p>
             <ButtonLink href="/classes" variant="outline" className="mt-6">
@@ -135,13 +145,13 @@ export default function AboutPage() {
           </div>
           <div>
             <Eyebrow>Pricing philosophy</Eyebrow>
-            <h2 className="mt-3 text-2xl font-bold sm:text-3xl">Why {formatINR(site.pricing.workshopPaise)} a class</h2>
+            <h2 className="mt-3 text-2xl font-bold sm:text-3xl">Why {formatINR(settings.workshopPricePaise)} a class</h2>
             <p className="mt-4 text-muted">
               We priced each workshop low on purpose. Trying a new skill — or a new instructor — shouldn&apos;t mean
               committing to an expensive course upfront. Pay per class, only for what you want to learn next.
             </p>
             <p className="mt-4 text-muted">
-              If you attended our most recent class, your next booking is {site.pricing.returningDiscountPercent}% off
+              If you attended our most recent class, your next booking is {settings.returningDiscountPercent}% off
               automatically (book before the next class starts) — our way of saying thanks for coming back, not a
               sales trick.
             </p>
@@ -213,17 +223,17 @@ export default function AboutPage() {
             <h2 className="mt-5 text-3xl font-bold sm:text-4xl">Need more than a class?</h2>
             <p className="mt-4 text-muted">
               Workshops are small group classes on a fixed topic. Personal training is a 1:1 session focused
-              entirely on your project, your channel and your questions — from a {training.durations[0].minutes}
-              -minute quick fix to a full {Math.max(...training.durations.map((d) => d.minutes))}-minute review.
+              entirely on your project, your channel and your questions — from a {durations[0].minutes}
+              -minute quick fix to a full {Math.max(...durations.map((d) => d.minutes))}-minute review.
             </p>
             <ButtonLink href="/personal-training" className="mt-6">
               See personal training <ArrowRight className="size-4" aria-hidden />
             </ButtonLink>
           </div>
           <ul className="grid grid-cols-2 gap-3">
-            {training.topics.slice(0, 6).map((t) => (
-              <li key={t} className="rounded-xl border border-line bg-surface px-4 py-3 text-sm font-medium text-ink-soft">
-                {t}
+            {topics.slice(0, 6).map((t) => (
+              <li key={t.id} className="rounded-xl border border-line bg-surface px-4 py-3 text-sm font-medium text-ink-soft">
+                {t.label}
               </li>
             ))}
           </ul>
@@ -274,7 +284,7 @@ export default function AboutPage() {
           <GraduationCap className="size-8 text-accent" aria-hidden />
           <h2 className="max-w-xl text-3xl font-bold sm:text-4xl">Pick a skill and see for yourself</h2>
           <p className="max-w-xl text-on-dark-muted">
-            {workshops.length} workshops, open-entry, {formatINR(site.pricing.workshopPaise)} each. Or ask us
+            {allWorkshops.length} workshops, open-entry, {formatINR(settings.workshopPricePaise)} each. Or ask us
             anything first —{" "}
             <Link href="/contact" className="font-medium text-on-dark underline underline-offset-2">
               get in touch

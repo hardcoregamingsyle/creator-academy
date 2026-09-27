@@ -5,7 +5,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { ArrowRight, CheckCircle2, Lock } from "lucide-react";
 import { formatDateShort, formatINR, formatTime } from "@/lib/format";
 import { isEmail } from "@/lib/validate";
-import { training } from "@/lib/site";
+import type { TrainingDuration, TrainingTopic } from "@/lib/data/training";
 import { Button, Field, Input, Notice, Textarea, cn } from "@/components/ui";
 import { DemoPaymentDialog, PaymentSpinner, paymentButtonLabel, usePayment } from "@/components/payment/use-payment";
 
@@ -17,9 +17,13 @@ const OTHER = "__other__";
 export function TrainingForm({
   slotsByDuration,
   demoMode,
+  durations,
+  topics,
 }: {
   slotsByDuration: Record<number, Slot[]>;
   demoMode: boolean;
+  durations: TrainingDuration[];
+  topics: TrainingTopic[];
 }) {
   const payment = usePayment();
 
@@ -40,7 +44,7 @@ export function TrainingForm({
   const effectiveTopic = topic === OTHER ? customTopic.trim() : topic;
 
   const slotsForDuration = duration ? (slotsByDuration[duration] ?? []) : [];
-  const selectedDuration = training.durations.find((d) => d.minutes === duration) ?? null;
+  const selectedDuration = durations.find((d) => d.minutes === duration) ?? null;
   const selectedSlot = slotsForDuration.find((s) => s.id === slotId) ?? null;
   const timeChosen = slotId !== null && selectedSlot !== null;
 
@@ -105,9 +109,9 @@ export function TrainingForm({
       {/* Step 1 — topic */}
       <StepSection number={1} label="Topic" title="What do you want help with?">
         <div className="grid gap-2.5 sm:grid-cols-2">
-          {training.topics.map((t) => (
-            <RadioCard key={t} name="topic" checked={topic === t} onSelect={() => setTopic(t)} disabled={busy}>
-              {t}
+          {topics.map((t) => (
+            <RadioCard key={t.id} name="topic" checked={topic === t.label} onSelect={() => setTopic(t.label)} disabled={busy}>
+              {t.label}
             </RadioCard>
           ))}
           <RadioCard name="topic" checked={topic === OTHER} onSelect={() => setTopic(OTHER)} disabled={busy}>
@@ -131,7 +135,7 @@ export function TrainingForm({
       {/* Step 2 — duration */}
       <StepSection number={2} label="Duration" title="How long do you need?" disabled={!topicChosen}>
         <div className="grid gap-3 sm:grid-cols-3">
-          {training.durations.map((d) => (
+          {durations.map((d) => (
             <RadioCard
               key={d.minutes}
               name="duration"

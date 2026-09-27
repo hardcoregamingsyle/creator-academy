@@ -5,9 +5,9 @@ import { CategoryIcon } from "@/components/brand";
 import { Button, Card, Container, EmptyState, Eyebrow, Section, SectionHeading } from "@/components/ui";
 import { passesOnSale } from "@/lib/data/monthly-pass";
 import { listUpcomingSessions } from "@/lib/data/sessions";
+import { getSiteSettings } from "@/lib/data/site-settings";
 import { formatDateShort, formatINR, formatTimeRange, istMonthKey } from "@/lib/format";
 import { paymentMode } from "@/lib/payments";
-import { site } from "@/lib/site";
 import { PassForm } from "./pass-form";
 
 export const dynamic = "force-dynamic";
@@ -18,15 +18,16 @@ export const metadata: Metadata = {
 };
 
 export default async function MonthlyPassPage() {
-  const [months, allUpcoming, mode] = await Promise.all([
+  const [months, allUpcoming, mode, settings] = await Promise.all([
     Promise.resolve(passesOnSale()),
     listUpcomingSessions(),
     Promise.resolve(paymentMode()),
+    getSiteSettings(),
   ]);
 
   const byMonth = new Map(months.map((m) => [m.monthKey, allUpcoming.filter((s) => istMonthKey(s.startsAt) === m.monthKey)]));
-  const price = site.pricing.monthlyPassPaise;
-  const perClassPrice = site.pricing.workshopPaise;
+  const price = settings.monthlyPassPricePaise;
+  const perClassPrice = settings.workshopPricePaise;
 
   return (
     <>

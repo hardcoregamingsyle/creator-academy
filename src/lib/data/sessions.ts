@@ -1,6 +1,8 @@
 import { execute, newId, nowIso, query, queryOne } from "@/lib/db";
 import { site } from "@/lib/site";
-import { getWorkshop, type Workshop } from "@/content/workshops";
+import { getSiteSettings } from "@/lib/data/site-settings";
+import { getWorkshop } from "@/lib/data/workshops";
+import { type Workshop } from "@/content/workshops";
 
 export type SessionStatus = "scheduled" | "completed" | "cancelled";
 
@@ -52,7 +54,7 @@ const SELECT_SESSION = `
     (SELECT COUNT(*) FROM registrations r WHERE r.session_id = s.id AND r.status = 'paid' AND r.attended = 1) AS attended_count
   FROM class_sessions s`;
 
-function mapSession(r: SessionRow): ClassSession {
+async function mapSession(r: SessionRow): Promise<ClassSession> {
   const seatsTaken = Number(r.seats_taken);
   return {
     id: r.id,
@@ -69,7 +71,7 @@ function mapSession(r: SessionRow): ClassSession {
     seatsLeft: Math.max(0, Number(r.capacity) - seatsTaken),
     paidCount: Number(r.paid_count),
     attendedCount: Number(r.attended_count),
-    workshop: getWorkshop(r.workshop_slug),
+    workshop: (await getWorkshop(r.workshop_slug)) ?? undefined,
   };
 }
 
@@ -92,12 +94,12 @@ export async function listUpcomingSessions(opts: { workshopSlug?: string; limit?
     args.push(opts.limit);
   }
   const rows = await query<SessionRow>(sql, args);
-  return rows.map(mapSession);
+  return Promise.all(rows.map(mapSession));
 }
 
 export async function getSession(id: string): Promise<ClassSession | null> {
   const row = await queryOne<SessionRow>(`${SELECT_SESSION} WHERE s.id = ?`, [holdCutoffIso(), id]);
-  return row ? mapSession(row) : null;
+  return row ? await mapSession(row) : null;
 }
 
 /** All sessions for the admin dashboard. `scope` filters upcoming vs past. */
@@ -115,7 +117,7 @@ export async function listSessions(scope: "upcoming" | "past" | "all" = "all"): 
     sql += ` ORDER BY s.starts_at DESC`;
   }
   const rows = await query<SessionRow>(sql, args);
-  return rows.map(mapSession);
+  return Promise.all(rows.map(mapSession));
 }
 
 /**
@@ -127,7 +129,7 @@ export async function getPreviousSession(): Promise<ClassSession | null> {
     `${SELECT_SESSION} WHERE s.status != 'cancelled' AND s.starts_at <= ? ORDER BY s.starts_at DESC LIMIT 1`,
     [holdCutoffIso(), nowIso()],
   );
-  return row ? mapSession(row) : null;
+  return row ? await mapSession(row) : null;
 }
 
 export type SessionInput = {
@@ -142,6 +144,7 @@ export type SessionInput = {
 
 export async function createSession(input: SessionInput): Promise<string> {
   const id = newId();
+  const settings = await getSiteSettings();
   await execute(
     `INSERT INTO class_sessions (id, workshop_slug, starts_at, duration_min, capacity, price_paise, meeting_link, status, notes, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?)`,
@@ -149,9 +152,9 @@ export async function createSession(input: SessionInput): Promise<string> {
       id,
       input.workshopSlug,
       input.startsAt,
-      input.durationMin ?? getWorkshop(input.workshopSlug)?.durationMin ?? 90,
+      input.durationMin ?? (await getWorkshop(input.workshopSlug))?.durationMin ?? 90,
       input.capacity ?? site.defaultCapacity,
-      input.pricePaise ?? site.pricing.workshopPaise,
+      input.pricePaise ?? settings.workshopPricePaise,
       input.meetingLink || null,
       input.notes || null,
       nowIso(),

@@ -1,5 +1,6 @@
 import { formatDateLong, formatINR, formatTimeRange, monthLabel } from "@/lib/format";
 import { site, siteUrl } from "@/lib/site";
+import { getSiteSettings } from "@/lib/data/site-settings";
 import type { RegistrationWithSession } from "@/lib/data/registrations";
 import type { TrainingBooking } from "@/lib/data/training";
 import type { MonthlyPass } from "@/lib/data/monthly-pass";
@@ -61,8 +62,9 @@ export function sessionReminderEmail(reg: RegistrationWithSession): EmailMessage
   };
 }
 
-export function feedbackRequestEmail(reg: RegistrationWithSession): EmailMessage {
+export async function feedbackRequestEmail(reg: RegistrationWithSession): Promise<EmailMessage> {
   const title = reg.workshop?.title ?? "the workshop";
+  const settings = await getSiteSettings();
   return {
     to: reg.email,
     subject: `How was ${title}?`,
@@ -70,7 +72,7 @@ export function feedbackRequestEmail(reg: RegistrationWithSession): EmailMessage
       `Hi ${reg.name.split(" ")[0]},`,
       `Thanks for joining ${title}! We'd love to know how it went — it takes 2 minutes and directly shapes what we teach next:`,
       `${siteUrl}/feedback?code=${reg.code}`,
-      `As a thank-you for attending, you get ${site.pricing.returningDiscountPercent}% off your next class. Book with this same email address before the next class starts and the discount is applied automatically at checkout.`,
+      `As a thank-you for attending, you get ${settings.returningDiscountPercent}% off your next class. Book with this same email address before the next class starts and the discount is applied automatically at checkout.`,
       `Upcoming classes: ${siteUrl}/schedule`,
       `— ${site.name}`,
     ].join("\n\n"),

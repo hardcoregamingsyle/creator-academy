@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CalendarDays } from "lucide-react";
-import { liveWorkshops } from "@/content/workshops";
+import { liveWorkshops } from "@/lib/data/workshops";
 import { listUpcomingSessions, type ClassSession } from "@/lib/data/sessions";
 import { dateParts, formatDateShort } from "@/lib/format";
 import { SessionList } from "@/components/session-list";
@@ -87,10 +87,10 @@ export default async function SchedulePage({
   searchParams: Promise<{ workshop?: string }>;
 }) {
   const { workshop: workshopParam } = await searchParams;
-  const allUpcoming = await listUpcomingSessions();
+  const [allUpcoming, live] = await Promise.all([listUpcomingSessions(), liveWorkshops()]);
 
   const scheduledSlugs = new Set(allUpcoming.map((s) => s.workshopSlug));
-  const filterableWorkshops = liveWorkshops.filter((w) => scheduledSlugs.has(w.slug));
+  const filterableWorkshops = live.filter((w) => scheduledSlugs.has(w.slug));
   const activeWorkshop = filterableWorkshops.find((w) => w.slug === workshopParam)?.slug;
 
   const filtered = activeWorkshop ? allUpcoming.filter((s) => s.workshopSlug === activeWorkshop) : allUpcoming;

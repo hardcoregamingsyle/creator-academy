@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { CalendarPlus, Link2 } from "lucide-react";
-import { liveWorkshops, plannedWorkshops } from "@/content/workshops";
+import { liveWorkshops, plannedWorkshops } from "@/lib/data/workshops";
 import { listSessions, type SessionStatus } from "@/lib/data/sessions";
+import { getSiteSettings } from "@/lib/data/site-settings";
 import { formatDateShort, formatTime } from "@/lib/format";
 import { site } from "@/lib/site";
 import { Badge, Card, cn, Eyebrow, Field, Input, Select, Textarea } from "@/components/ui";
@@ -122,7 +123,9 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
   );
 }
 
-function ScheduleForm() {
+async function ScheduleForm() {
+  const [live, planned, settings] = await Promise.all([liveWorkshops(), plannedWorkshops(), getSiteSettings()]);
+
   return (
     <details className="group rounded-2xl border border-line bg-surface shadow-card">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 font-display text-lg font-bold text-ink">
@@ -141,14 +144,14 @@ function ScheduleForm() {
                   Choose a workshop…
                 </option>
                 <optgroup label="Live">
-                  {liveWorkshops.map((w) => (
+                  {live.map((w) => (
                     <option key={w.slug} value={w.slug}>
                       {w.title}
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label="Planned">
-                  {plannedWorkshops.map((w) => (
+                  {planned.map((w) => (
                     <option key={w.slug} value={w.slug}>
                       {w.title}
                     </option>
@@ -172,7 +175,7 @@ function ScheduleForm() {
                 type="number"
                 min={0}
                 step="1"
-                defaultValue={site.pricing.workshopPaise / 100}
+                defaultValue={settings.workshopPricePaise / 100}
                 required
               />
             </Field>
