@@ -37,12 +37,13 @@ jobs:
       - name: Build for Cloudflare
         run: npm run cf:build
         env:
-          # Baked into the client bundle at build time — public, non-secret
-          # business details. Set these as repository *Variables* (not
-          # secrets) under Settings → Secrets and variables → Actions → Variables
-          # if you want them shown correctly; otherwise the code's defaults
-          # (e.g. "hello@example.com") are used.
-          SITE_URL: ${{ vars.SITE_URL }}
+          # NEXT_PUBLIC_* vars are inlined into the client bundle at build
+          # time, so they must be set here as repository *Variables* (not
+          # secrets) under Settings → Secrets and variables → Actions →
+          # Variables; otherwise the code's defaults (e.g. "hello@example.com")
+          # are used. SITE_URL is NOT NEXT_PUBLIC_-prefixed — Next.js reads it
+          # server-side at runtime inside the Worker, so it must be set as a
+          # Worker secret (`wrangler secret put SITE_URL`), not here.
           NEXT_PUBLIC_CONTACT_EMAIL: ${{ vars.NEXT_PUBLIC_CONTACT_EMAIL }}
           NEXT_PUBLIC_LEGAL_NAME: ${{ vars.NEXT_PUBLIC_LEGAL_NAME }}
           NEXT_PUBLIC_LEGAL_ADDRESS: ${{ vars.NEXT_PUBLIC_LEGAL_ADDRESS }}
