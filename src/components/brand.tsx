@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { SVGProps } from "react";
 import {
@@ -18,14 +19,18 @@ import { site } from "@/lib/site";
 import type { CategorySlug } from "@/content/workshops";
 import { cn } from "./ui";
 
-/** Logo mark: a play button with a recording light. */
+/** Logo mark: the CREATEVA symbol, cropped square from the full brand lockup. */
 export function LogoMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 32 32" className={cn("size-8", className)} aria-hidden>
-      <rect width="32" height="32" rx="9" fill="currentColor" />
-      <path d="M12.5 10.2v11.6c0 .8.9 1.3 1.6.9l9.2-5.8c.6-.4.6-1.3 0-1.7l-9.2-5.8c-.7-.5-1.6 0-1.6.8Z" fill="#FFFFFF" />
-      <circle cx="25" cy="7" r="3.2" fill="#DC2626" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
+    <Image
+      src="/logo-icon.png"
+      alt=""
+      width={64}
+      height={64}
+      unoptimized
+      className={cn("size-8 shrink-0 rounded-[9px]", className)}
+      priority
+    />
   );
 }
 
@@ -36,7 +41,7 @@ export function Logo({ className, dark }: { className?: string; dark?: boolean }
       className={cn("group inline-flex items-center gap-2.5", dark ? "text-on-dark" : "text-ink", className)}
       aria-label={`${site.name} — home`}
     >
-      <LogoMark className={dark ? "text-on-dark [&_path]:fill-ink" : "text-ink"} />
+      <LogoMark />
       <span className="font-display text-lg font-bold tracking-tight">{site.name}</span>
     </Link>
   );
