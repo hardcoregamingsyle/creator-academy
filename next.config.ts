@@ -14,7 +14,11 @@ const nextConfig: NextConfig = {
     // mismatch when accessed through the custom domain, even though plain
     // page loads (GET) work fine.
     serverActions: {
-      allowedOrigins: ["createva.skinticals.com", "creator-academy.hardcorgamingstyle.workers.dev"],
+      allowedOrigins: [
+        "createva.skinticals.com",
+        "www.createva.co.in",
+        "creator-academy.hardcorgamingstyle.workers.dev",
+      ],
     },
   },
   // @libsql/client (and its transitive @libsql/isomorphic-ws dependency)
