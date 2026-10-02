@@ -1,4 +1,4 @@
-import { execute, query, queryOne } from "@/lib/db";
+import { execute, query, queryOne, seedOnce } from "@/lib/db";
 import type { CategorySlug, Level, Workshop, WorkshopStatus } from "@/content/workshops";
 
 /**
@@ -62,9 +62,11 @@ export type WorkshopInput = {
   bring: string[];
 };
 
-async function ensureSeeded(): Promise<void> {
-  const rows = await query<{ n: number }>(`SELECT COUNT(*) AS n FROM workshops`);
-  if (Number(rows[0]?.n ?? 0) > 0) return;
+function ensureSeeded(): Promise<void> {
+  return seedOnce("workshops", "workshops", seedWorkshops);
+}
+
+async function seedWorkshops(): Promise<void> {
   const now = new Date().toISOString();
   for (let i = 0; i < SEED_WORKSHOPS.length; i++) {
     const w = SEED_WORKSHOPS[i];
@@ -101,6 +103,16 @@ export async function listWorkshops(): Promise<Workshop[]> {
   await ensureSeeded();
   const rows = await query<Row>(`SELECT * FROM workshops ORDER BY sort_order ASC`);
   return rows.map(mapRow);
+}
+
+/**
+ * Every workshop keyed by slug, in ONE query. Use this when resolving the
+ * workshop for many rows (sessions, registrations, feedback…) instead of
+ * calling getWorkshop() per row — each call is a network round trip, and
+ * Workers cap subrequests and CPU per request.
+ */
+export async function workshopMap(): Promise<Map<string, Workshop>> {
+  return new Map((await listWorkshops()).map((w) => [w.slug, w]));
 }
 
 export async function getWorkshop(slug: string): Promise<Workshop | null> {

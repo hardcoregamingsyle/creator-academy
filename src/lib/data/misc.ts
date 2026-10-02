@@ -1,5 +1,5 @@
 import { execute, newId, nowIso, query } from "@/lib/db";
-import { getWorkshop, listWorkshops } from "@/lib/data/workshops";
+import { getWorkshop, listWorkshops, workshopMap } from "@/lib/data/workshops";
 import { normaliseEmail } from "./registrations";
 
 // ───────────────────────── workshop interest / demand ─────────────────────────
@@ -41,17 +41,16 @@ export async function listInterest(workshopSlug?: string): Promise<InterestEntry
   const rows = workshopSlug
     ? await query<Record<string, string | null>>(`SELECT * FROM interest WHERE workshop_slug = ? ORDER BY created_at DESC`, [workshopSlug])
     : await query<Record<string, string | null>>(`SELECT * FROM interest ORDER BY created_at DESC`);
-  return Promise.all(
-    rows.map(async (r) => ({
-      id: r.id as string,
-      workshopSlug: r.workshop_slug as string,
-      workshopTitle: (await getWorkshop(r.workshop_slug as string))?.title ?? (r.workshop_slug as string),
-      name: r.name,
-      email: r.email as string,
-      note: r.note,
-      createdAt: r.created_at as string,
-    })),
-  );
+  const workshops = rows.length ? await workshopMap() : new Map();
+  return rows.map((r) => ({
+    id: r.id as string,
+    workshopSlug: r.workshop_slug as string,
+    workshopTitle: workshops.get(r.workshop_slug as string)?.title ?? (r.workshop_slug as string),
+    name: r.name,
+    email: r.email as string,
+    note: r.note,
+    createdAt: r.created_at as string,
+  }));
 }
 
 /** Interest count per workshop, highest first (includes workshops with 0). */

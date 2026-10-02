@@ -1,7 +1,7 @@
 import { execute, newId, nowIso, query, queryOne } from "@/lib/db";
 import { site } from "@/lib/site";
 import { getSiteSettings } from "@/lib/data/site-settings";
-import { getWorkshop } from "@/lib/data/workshops";
+import { getWorkshop, workshopMap } from "@/lib/data/workshops";
 import { type Workshop } from "@/content/workshops";
 
 export type SessionStatus = "scheduled" | "completed" | "cancelled";
@@ -54,7 +54,7 @@ const SELECT_SESSION = `
     (SELECT COUNT(*) FROM registrations r WHERE r.session_id = s.id AND r.status = 'paid' AND r.attended = 1) AS attended_count
   FROM class_sessions s`;
 
-async function mapSession(r: SessionRow): Promise<ClassSession> {
+function mapSession(r: SessionRow, workshop: Workshop | undefined): ClassSession {
   const seatsTaken = Number(r.seats_taken);
   return {
     id: r.id,
@@ -71,8 +71,18 @@ async function mapSession(r: SessionRow): Promise<ClassSession> {
     seatsLeft: Math.max(0, Number(r.capacity) - seatsTaken),
     paidCount: Number(r.paid_count),
     attendedCount: Number(r.attended_count),
-    workshop: (await getWorkshop(r.workshop_slug)) ?? undefined,
+    workshop,
   };
+}
+
+async function mapSessions(rows: SessionRow[]): Promise<ClassSession[]> {
+  if (rows.length === 0) return [];
+  const workshops = await workshopMap();
+  return rows.map((r) => mapSession(r, workshops.get(r.workshop_slug)));
+}
+
+async function mapOneSession(row: SessionRow): Promise<ClassSession> {
+  return mapSession(row, (await getWorkshop(row.workshop_slug)) ?? undefined);
 }
 
 /** Is this session open for booking right now? */
@@ -94,12 +104,12 @@ export async function listUpcomingSessions(opts: { workshopSlug?: string; limit?
     args.push(opts.limit);
   }
   const rows = await query<SessionRow>(sql, args);
-  return Promise.all(rows.map(mapSession));
+  return mapSessions(rows);
 }
 
 export async function getSession(id: string): Promise<ClassSession | null> {
   const row = await queryOne<SessionRow>(`${SELECT_SESSION} WHERE s.id = ?`, [holdCutoffIso(), id]);
-  return row ? await mapSession(row) : null;
+  return row ? await mapOneSession(row) : null;
 }
 
 /** All sessions for the admin dashboard. `scope` filters upcoming vs past. */
@@ -117,7 +127,7 @@ export async function listSessions(scope: "upcoming" | "past" | "all" = "all"): 
     sql += ` ORDER BY s.starts_at DESC`;
   }
   const rows = await query<SessionRow>(sql, args);
-  return Promise.all(rows.map(mapSession));
+  return mapSessions(rows);
 }
 
 /**
@@ -129,7 +139,7 @@ export async function getPreviousSession(): Promise<ClassSession | null> {
     `${SELECT_SESSION} WHERE s.status != 'cancelled' AND s.starts_at <= ? ORDER BY s.starts_at DESC LIMIT 1`,
     [holdCutoffIso(), nowIso()],
   );
-  return row ? await mapSession(row) : null;
+  return row ? await mapOneSession(row) : null;
 }
 
 export type SessionInput = {

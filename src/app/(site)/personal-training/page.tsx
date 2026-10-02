@@ -33,13 +33,15 @@ const howItWorks = [
 ];
 
 export default async function PersonalTrainingPage() {
-  const [slotsByDuration, mode, durations, topics, settings, faqGroups] = await Promise.all([
-    listAvailableSlotsByDuration(),
-    Promise.resolve(paymentMode()),
+  const mode = paymentMode();
+  const [durations, topics, settings] = await Promise.all([
     listTrainingDurations(),
     listTrainingTopics(),
     getSiteSettings(),
-    getFaqGroups(),
+  ]);
+  const [slotsByDuration, faqGroups] = await Promise.all([
+    listAvailableSlotsByDuration(durations),
+    getFaqGroups({ settings, durations }),
   ]);
   const workshopPaise = settings.workshopPricePaise;
   const anySlots = durations.some((d) => (slotsByDuration[d.minutes]?.length ?? 0) > 0);

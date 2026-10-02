@@ -1,4 +1,4 @@
-import { execute, newCode, newId, nowIso, query, queryOne } from "@/lib/db";
+import { execute, newCode, newId, nowIso, query, queryOne, seedOnce } from "@/lib/db";
 import { training } from "@/lib/site";
 import { normaliseEmail } from "./registrations";
 import { holdCutoffIso } from "./sessions";
@@ -105,8 +105,7 @@ export type TrainingTopic = { id: string; label: string; sortOrder: number };
 // columns) makes this safe if two requests both see an empty table and race
 // to seed it concurrently.
 async function ensureTrainingConfigSeeded(): Promise<void> {
-  const rows = await query<{ n: number }>(`SELECT COUNT(*) AS n FROM training_durations`);
-  if (Number(rows[0]?.n ?? 0) === 0) {
+  await seedOnce("training_durations", "training_durations", async () => {
     for (let i = 0; i < training.durations.length; i++) {
       const d = training.durations[i];
       await execute(
@@ -114,9 +113,8 @@ async function ensureTrainingConfigSeeded(): Promise<void> {
         [newId(), d.minutes, d.label, d.blurb, d.paise, i * 10],
       );
     }
-  }
-  const topicRows = await query<{ n: number }>(`SELECT COUNT(*) AS n FROM training_topics`);
-  if (Number(topicRows[0]?.n ?? 0) === 0) {
+  });
+  await seedOnce("training_topics", "training_topics", async () => {
     for (let i = 0; i < training.topics.length; i++) {
       await execute(`INSERT OR IGNORE INTO training_topics (id, label, sort_order) VALUES (?, ?, ?)`, [
         newId(),
@@ -124,7 +122,7 @@ async function ensureTrainingConfigSeeded(): Promise<void> {
         i * 10,
       ]);
     }
-  }
+  });
 }
 
 export async function listTrainingDurations(): Promise<TrainingDuration[]> {
@@ -261,13 +259,15 @@ async function busyIntervals(): Promise<Interval[]> {
  * Open slots a student can book, for every duration option.
  * Returns `{ 45: [...], 90: [...], 120: [...] }` (slots sorted by time).
  */
-export async function listAvailableSlotsByDuration(): Promise<Record<number, { id: string; startsAt: string }[]>> {
+export async function listAvailableSlotsByDuration(
+  knownDurations?: TrainingDuration[],
+): Promise<Record<number, { id: string; startsAt: string }[]>> {
   const minLead = Date.now() + 2 * 3600_000; // at least 2 hours' notice
   const slots = (await listSlots("upcoming")).filter(
     (s) => s.isOpen && !s.bookingCode && new Date(s.startsAt).getTime() > minLead,
   );
   const busy = await busyIntervals();
-  const durations = await listTrainingDurations();
+  const durations = knownDurations ?? (await listTrainingDurations());
   const result: Record<number, { id: string; startsAt: string }[]> = {};
   for (const d of durations) {
     result[d.minutes] = slots

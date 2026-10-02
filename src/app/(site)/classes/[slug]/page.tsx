@@ -48,13 +48,13 @@ export default async function WorkshopPage({ params }: { params: Promise<{ slug:
   const category = getCategory(workshop.category);
   const simple = workshop.learn.length === 0 && workshop.forWho.length === 0;
 
-  const [allUpcoming, testimonials, allWorkshops, settings, faqGroups] = await Promise.all([
+  const [allUpcoming, testimonials, allWorkshops, settings] = await Promise.all([
     listUpcomingSessions(),
     listPublicTestimonials({ workshopSlug: slug, limit: 6 }),
     listWorkshops(),
     getSiteSettings(),
-    getFaqGroups(),
   ]);
+  const faqGroups = await getFaqGroups({ settings });
   const sessionsForWorkshop = allUpcoming.filter((s) => s.workshopSlug === slug);
 
   // A short, generically-relevant selection — every class page shows the same

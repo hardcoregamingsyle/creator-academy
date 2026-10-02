@@ -1,13 +1,19 @@
 import { formatINR } from "@/lib/format";
 import { site } from "@/lib/site";
-import { getSiteSettings } from "@/lib/data/site-settings";
-import { listTrainingDurations } from "@/lib/data/training";
+import { getSiteSettings, type SiteSettings } from "@/lib/data/site-settings";
+import { listTrainingDurations, type TrainingDuration } from "@/lib/data/training";
 
 export type FaqItem = { q: string; a: string };
 export type FaqGroup = { title: string; items: FaqItem[] };
 
-export async function getFaqGroups(): Promise<FaqGroup[]> {
-  const [settings, durations] = await Promise.all([getSiteSettings(), listTrainingDurations()]);
+/** Values a page has already fetched, passed in so they aren't queried twice. */
+export type FaqContext = { settings?: SiteSettings; durations?: TrainingDuration[] };
+
+export async function getFaqGroups(known: FaqContext = {}): Promise<FaqGroup[]> {
+  const [settings, durations] = await Promise.all([
+    known.settings ?? getSiteSettings(),
+    known.durations ?? listTrainingDurations(),
+  ]);
   const price = `₹${settings.workshopPricePaise / 100}`;
   const trainingFrom = `₹${Math.min(...durations.map((d) => d.paise)) / 100}`;
   const discountedPrice = formatINR(
@@ -119,8 +125,8 @@ export async function getFaqGroups(): Promise<FaqGroup[]> {
 }
 
 /** A short selection for the home page. */
-export async function getHomeFaq(): Promise<FaqItem[]> {
-  const groups = await getFaqGroups();
+export async function getHomeFaq(known: FaqContext = {}): Promise<FaqItem[]> {
+  const groups = await getFaqGroups(known);
   return [
     groups[0].items[0],
     groups[0].items[1],

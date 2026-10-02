@@ -1,4 +1,4 @@
-import { execute, newId, query, queryOne } from "@/lib/db";
+import { execute, newId, query, queryOne, seedOnce } from "@/lib/db";
 import { site } from "@/lib/site";
 
 /**
@@ -22,21 +22,21 @@ function mapRow(r: Row): Social {
   return { id: r.id, platform: r.platform, handle: r.handle, url: r.url, sortOrder: Number(r.sort_order) };
 }
 
-async function ensureSeeded(): Promise<void> {
-  const rows = await query<{ n: number }>(`SELECT COUNT(*) AS n FROM socials`);
-  if (Number(rows[0]?.n ?? 0) > 0) return;
+function ensureSeeded(): Promise<void> {
   // INSERT OR IGNORE (keyed on the UNIQUE platform column) makes this safe if
   // two requests both see an empty table and race to seed it concurrently.
-  for (let i = 0; i < site.socials.length; i++) {
-    const s = site.socials[i];
-    await execute(`INSERT OR IGNORE INTO socials (id, platform, handle, url, sort_order) VALUES (?, ?, ?, ?, ?)`, [
-      newId(),
-      s.label,
-      s.handle,
-      s.url,
-      i * 10,
-    ]);
-  }
+  return seedOnce("socials", "socials", async () => {
+    for (let i = 0; i < site.socials.length; i++) {
+      const s = site.socials[i];
+      await execute(`INSERT OR IGNORE INTO socials (id, platform, handle, url, sort_order) VALUES (?, ?, ?, ?, ?)`, [
+        newId(),
+        s.label,
+        s.handle,
+        s.url,
+        i * 10,
+      ]);
+    }
+  });
 }
 
 export async function listSocials(): Promise<Social[]> {

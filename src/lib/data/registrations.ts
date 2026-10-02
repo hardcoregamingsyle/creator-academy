@@ -1,7 +1,7 @@
 import { execute, newCode, newId, nowIso, query, queryOne } from "@/lib/db";
 import { istMonthKey } from "@/lib/format";
 import { getSiteSettings } from "@/lib/data/site-settings";
-import { getWorkshop } from "@/lib/data/workshops";
+import { getWorkshop, workshopMap } from "@/lib/data/workshops";
 import { type Workshop } from "@/content/workshops";
 import { hasActivePass } from "./monthly-pass";
 import { getPreviousSession, getSession, holdCutoffIso, isBookable, type ClassSession } from "./sessions";
@@ -91,7 +91,7 @@ function mapReg(r: RegRow): Registration {
   };
 }
 
-async function mapRegWithSession(r: RegWithSessionRow): Promise<RegistrationWithSession> {
+function mapRegWithSession(r: RegWithSessionRow, workshop: Workshop | undefined): RegistrationWithSession {
   return {
     ...mapReg(r),
     sessionStartsAt: r.s_starts_at,
@@ -99,8 +99,18 @@ async function mapRegWithSession(r: RegWithSessionRow): Promise<RegistrationWith
     sessionStatus: r.s_status,
     meetingLink: r.s_meeting_link,
     workshopSlug: r.s_workshop_slug,
-    workshop: (await getWorkshop(r.s_workshop_slug)) ?? undefined,
+    workshop,
   };
+}
+
+async function mapRegsWithSession(rows: RegWithSessionRow[]): Promise<RegistrationWithSession[]> {
+  if (rows.length === 0) return [];
+  const workshops = await workshopMap();
+  return rows.map((r) => mapRegWithSession(r, workshops.get(r.s_workshop_slug)));
+}
+
+async function mapOneRegWithSession(row: RegWithSessionRow): Promise<RegistrationWithSession> {
+  return mapRegWithSession(row, (await getWorkshop(row.s_workshop_slug)) ?? undefined);
 }
 
 const SELECT_WITH_SESSION = `
@@ -294,17 +304,17 @@ export async function renewSeatHold(id: string): Promise<boolean> {
 
 export async function getRegistrationByCode(code: string): Promise<RegistrationWithSession | null> {
   const row = await queryOne<RegWithSessionRow>(`${SELECT_WITH_SESSION} WHERE r.code = ?`, [code.trim().toUpperCase()]);
-  return row ? await mapRegWithSession(row) : null;
+  return row ? await mapOneRegWithSession(row) : null;
 }
 
 export async function getRegistrationById(id: string): Promise<RegistrationWithSession | null> {
   const row = await queryOne<RegWithSessionRow>(`${SELECT_WITH_SESSION} WHERE r.id = ?`, [id]);
-  return row ? await mapRegWithSession(row) : null;
+  return row ? await mapOneRegWithSession(row) : null;
 }
 
 export async function getRegistrationByOrderId(orderId: string): Promise<RegistrationWithSession | null> {
   const row = await queryOne<RegWithSessionRow>(`${SELECT_WITH_SESSION} WHERE r.provider_order_id = ?`, [orderId]);
-  return row ? await mapRegWithSession(row) : null;
+  return row ? await mapOneRegWithSession(row) : null;
 }
 
 export async function listRegistrations(
@@ -333,7 +343,7 @@ export async function listRegistrations(
     args.push(opts.limit);
   }
   const rows = await query<RegWithSessionRow>(sql, args);
-  return Promise.all(rows.map(mapRegWithSession));
+  return mapRegsWithSession(rows);
 }
 
 /** All registrations (any status) made with an email — for the student's own history. */
@@ -342,7 +352,7 @@ export async function listRegistrationsByEmail(email: string): Promise<Registrat
     `${SELECT_WITH_SESSION} WHERE r.email = ? ORDER BY s.starts_at DESC`,
     [normaliseEmail(email)],
   );
-  return Promise.all(rows.map(mapRegWithSession));
+  return mapRegsWithSession(rows);
 }
 
 // ───────────────────────── mutations ─────────────────────────

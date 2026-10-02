@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { categories } from "@/content/workshops";
 import { getHomeFaq } from "@/content/faq";
-import { liveWorkshops, listWorkshops } from "@/lib/data/workshops";
+import { listWorkshops } from "@/lib/data/workshops";
 import { listPublicTestimonials } from "@/lib/data/feedback";
 import { listUpcomingSessions, type ClassSession } from "@/lib/data/sessions";
 import { activeSocials, type Social } from "@/lib/data/socials";
@@ -38,16 +38,16 @@ import { WorkshopCard } from "@/components/workshop-card";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [upcoming, testimonials, allWorkshops, live, socials, settings, durations, homeFaqItems] = await Promise.all([
+  const [upcoming, testimonials, allWorkshops, socials, settings, durations] = await Promise.all([
     listUpcomingSessions(),
     listPublicTestimonials({ limit: 6 }),
     listWorkshops(),
-    liveWorkshops(),
     activeSocials(),
     getSiteSettings(),
     listTrainingDurations(),
-    getHomeFaq(),
   ]);
+  const live = allWorkshops.filter((w) => w.status === "live");
+  const homeFaqItems = await getHomeFaq({ settings, durations });
   const next = upcoming.find((s) => s.seatsLeft > 0) ?? upcoming[0] ?? null;
   const nextByWorkshop = new Map<string, string>();
   for (const s of upcoming) if (!nextByWorkshop.has(s.workshopSlug) && s.seatsLeft > 0) nextByWorkshop.set(s.workshopSlug, s.startsAt);

@@ -1,5 +1,5 @@
 import { execute, newId, nowIso, query, queryOne } from "@/lib/db";
-import { getWorkshop } from "@/lib/data/workshops";
+import { getWorkshop, workshopMap } from "@/lib/data/workshops";
 
 /**
  * Post-class feedback. Public display requires BOTH the student's consent
@@ -44,12 +44,12 @@ type FeedbackRow = {
   created_at: string;
 };
 
-async function mapFeedback(r: FeedbackRow): Promise<Feedback> {
+function mapFeedback(r: FeedbackRow, titles: Map<string, { title: string }>): Feedback {
   return {
     id: r.id,
     registrationCode: r.registration_code,
     workshopSlug: r.workshop_slug,
-    workshopTitle: r.workshop_slug ? (await getWorkshop(r.workshop_slug))?.title ?? r.workshop_slug : null,
+    workshopTitle: r.workshop_slug ? titles.get(r.workshop_slug)?.title ?? r.workshop_slug : null,
     rating: Number(r.rating),
     learned: r.learned,
     unclear: r.unclear,
@@ -121,7 +121,8 @@ export async function listFeedback(opts: { workshopSlug?: string } = {}): Promis
   const rows = opts.workshopSlug
     ? await query<FeedbackRow>(`SELECT * FROM feedback WHERE workshop_slug = ? ORDER BY created_at DESC`, [opts.workshopSlug])
     : await query<FeedbackRow>(`SELECT * FROM feedback ORDER BY created_at DESC`);
-  return Promise.all(rows.map(mapFeedback));
+  const titles = await workshopMap();
+  return rows.map((r) => mapFeedback(r, titles));
 }
 
 /** Approve/unapprove for public display. Only possible when the student consented. */
@@ -152,18 +153,17 @@ export async function listPublicTestimonials(opts: { limit?: number; workshopSlu
   sql += ` ORDER BY created_at DESC LIMIT ?`;
   args.push(opts.limit ?? 6);
   const rows = await query<FeedbackRow>(sql, args);
-  return Promise.all(
-    rows.map(async (r) => {
-      const f = await mapFeedback(r);
-      return {
-        id: f.id,
-        quote: f.publicComment ?? "",
-        name: f.displayName || "Student",
-        rating: f.rating,
-        workshopTitle: f.workshopTitle,
-      };
-    }),
-  );
+  const titles = await workshopMap();
+  return rows.map((r) => {
+    const f = mapFeedback(r, titles);
+    return {
+      id: f.id,
+      quote: f.publicComment ?? "",
+      name: f.displayName || "Student",
+      rating: f.rating,
+      workshopTitle: f.workshopTitle,
+    };
+  });
 }
 
 export type FeedbackStats = {
@@ -184,13 +184,12 @@ export async function feedbackStats(): Promise<FeedbackStats> {
     if (!f.workshopSlug) continue;
     groups.set(f.workshopSlug, [...(groups.get(f.workshopSlug) ?? []), f.rating]);
   }
-  const byWorkshop = await Promise.all(
-    [...groups.entries()].map(async ([slug, ratings]) => ({
-      workshopSlug: slug,
-      workshopTitle: (await getWorkshop(slug))?.title ?? slug,
-      count: ratings.length,
-      averageRating: ratings.reduce((a, b) => a + b, 0) / ratings.length,
-    })),
-  );
+  const titles = await workshopMap();
+  const byWorkshop = [...groups.entries()].map(([slug, ratings]) => ({
+    workshopSlug: slug,
+    workshopTitle: titles.get(slug)?.title ?? slug,
+    count: ratings.length,
+    averageRating: ratings.reduce((a, b) => a + b, 0) / ratings.length,
+  }));
   return { count, averageRating, wouldAttendAgain, byWorkshop };
 }

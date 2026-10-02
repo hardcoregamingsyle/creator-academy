@@ -12,7 +12,11 @@ import { SCHEMA } from "./schema";
  */
 
 let client: Client | null = null;
-let ready: Promise<void> | null = null;
+// A plain flag, deliberately NOT a shared promise: on Cloudflare Workers a
+// promise created inside one request can never be settled if that request is
+// cancelled (CPU limit, client disconnect), and every later request on the
+// same isolate that awaited it would hang forever ("Worker's code had hung").
+let schemaReady = false;
 
 function getClient(): Client {
   if (client) return client;
@@ -36,25 +40,22 @@ const MIGRATIONS: string[] = [
   "ALTER TABLE registrations ADD COLUMN covered_by_pass_id TEXT",
 ];
 
+/**
+ * Every statement is idempotent, so concurrent cold-start requests may each run
+ * this once (harmless) rather than sharing one in-flight promise (unsafe — see
+ * `schemaReady`). Once it has succeeded on this isolate, it's a no-op.
+ */
 async function ensureSchema(): Promise<void> {
-  if (!ready) {
-    ready = getClient()
-      .executeMultiple(SCHEMA)
-      .then(async () => {
-        for (const sql of MIGRATIONS) {
-          await getClient()
-            .execute(sql)
-            .catch((err) => {
-              if (!/duplicate column/i.test(String(err?.message ?? err))) throw err;
-            });
-        }
-      })
+  if (schemaReady) return;
+  await getClient().executeMultiple(SCHEMA);
+  for (const sql of MIGRATIONS) {
+    await getClient()
+      .execute(sql)
       .catch((err) => {
-        ready = null;
-        throw err;
+        if (!/duplicate column/i.test(String(err?.message ?? err))) throw err;
       });
   }
-  return ready;
+  schemaReady = true;
 }
 
 /** Run a single statement and return all rows. */
@@ -84,6 +85,28 @@ export async function batch(statements: { sql: string; args?: InArgs }[]): Promi
     statements.map((s) => ({ sql: s.sql, args: s.args ?? [] })),
     "write",
   );
+}
+
+const seededKeys = new Set<string>();
+
+/**
+ * Run `seed` at most once ever per content table, not once per request.
+ * - Per-isolate: a plain Set remembers keys already confirmed seeded (no
+ *   shared promises — see `schemaReady`).
+ * - Per-database: the `content_seed` marker row. If a table already has rows
+ *   but no marker (it was seeded before markers existed) we just record the
+ *   marker rather than seeding again. `seed` must itself be race-safe
+ *   (INSERT OR IGNORE), since two cold requests can both reach it.
+ */
+export async function seedOnce(key: string, table: string, seed: () => Promise<void>): Promise<void> {
+  if (seededKeys.has(key)) return;
+  const marker = await queryOne(`SELECT 1 AS x FROM content_seed WHERE key = ?`, [key]);
+  if (!marker) {
+    const [row] = await query<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`);
+    if (Number(row?.n ?? 0) === 0) await seed();
+    await execute(`INSERT OR IGNORE INTO content_seed (key) VALUES (?)`, [key]);
+  }
+  seededKeys.add(key);
 }
 
 export function nowIso(): string {

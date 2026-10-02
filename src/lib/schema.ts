@@ -178,6 +178,13 @@ CREATE TABLE IF NOT EXISTS site_settings (
   updated_at                  TEXT NOT NULL
 );
 
+-- Records that a content table has been seeded from its code defaults, so
+-- emptying a table in the admin (e.g. deleting every social link) doesn't
+-- make the defaults reappear on the next read.
+CREATE TABLE IF NOT EXISTS content_seed (
+  key TEXT PRIMARY KEY
+);
+
 CREATE TABLE IF NOT EXISTS socials (
   id         TEXT PRIMARY KEY,
   platform   TEXT NOT NULL UNIQUE,
