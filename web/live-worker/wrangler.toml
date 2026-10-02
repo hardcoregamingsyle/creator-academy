@@ -1,0 +1,30 @@
+# createva-live: the live-class room Worker (one Durable Object per class session).
+# Deploy:  npm run deploy:live      Local:  npm run dev:live  (http://127.0.0.1:8790)
+#
+# Secrets (set once with `wrangler secret put <NAME> -c live-worker/wrangler.toml`; for local dev put them in
+# live-worker/.dev.vars, which is git-ignored):
+#   LIVE_SECRET  signs/verifies the class tickets. Must be IDENTICAL to LIVE_SECRET on the Pages project
+#                (the Pages API falls back to SESSION_SECRET when LIVE_SECRET is unset there; set it on both).
+#   CRON_SECRET  Bearer token the cron below sends to POST <SITE_URL>/api/internal/reminders. Must be IDENTICAL
+#                to CRON_SECRET on the Pages project.
+# Then on the Pages project set LIVE_WS_URL to this Worker's socket base, e.g. wss://createva-live.<account>.workers.dev/room
+
+name = "createva-live"
+main = "src/index.ts"
+compatibility_date = "2026-09-24"
+
+[vars]
+# Public site origin: CORS for the SPA, and where the reminder cron calls.
+SITE_URL = "https://www.createva.co.in"
+
+[[durable_objects.bindings]]
+name = "LIVE_ROOM"
+class_name = "LiveRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LiveRoom"]
+
+[triggers]
+# Every 10 minutes: asks the Pages API to send the 24h class reminders (a no-op when none are due).
+crons = ["*/10 * * * *"]

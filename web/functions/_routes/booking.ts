@@ -135,7 +135,7 @@ routes.get("/pages/booking/:code", async (c) => {
           durationMin: reg.sessionDurationMin,
           details: [
             `Your booking page: ${siteUrl}/booking/${reg.code}`,
-            reg.meetingLink ? `Joining link: ${reg.meetingLink}` : "Your joining link will be emailed before the class.",
+            `Joining link: ${reg.meetingLink ?? `${siteUrl}/live/${reg.code}`}`, // on-site class room unless an external link is set
           ].join("\n"),
         })
       : null,
@@ -318,7 +318,7 @@ routes.get("/calendar/:code", async (c) => {
       title: `${reg.workshop?.title ?? "Workshop"} — ${site.name}`,
       startsAt: reg.sessionStartsAt,
       durationMin: reg.sessionDurationMin,
-      meetingLink: reg.meetingLink,
+      meetingLink: reg.meetingLink ?? `${siteUrl}/live/${reg.code}`, // on-site class room unless an external link is set
       bookingPath: `/booking/${reg.code}`,
     };
   } else if (code.startsWith("PT-")) {

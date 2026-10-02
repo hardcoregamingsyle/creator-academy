@@ -20,6 +20,10 @@ process.env.DATABASE_URL ||= "file:../data/academy.db";
 process.env.ADMIN_PASSWORD ||= "admin12345";
 process.env.SESSION_SECRET ||= "dev-only-secret";
 process.env.SITE_URL ||= "http://localhost:5173";
+// Live classes: the room Worker from `npm run dev:live` (its live-worker/.dev.vars must use the same LIVE_SECRET).
+process.env.LIVE_WS_URL ||= "ws://127.0.0.1:8790/room";
+process.env.LIVE_SECRET ||= "dev-live-secret";
+process.env.CRON_SECRET ||= "dev-cron-secret";
 
 const PORT = Number(process.env.PORT || 8788);
 

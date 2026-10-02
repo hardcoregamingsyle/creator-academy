@@ -10,11 +10,13 @@ import {
   ExternalLink,
   ListChecks,
   Mail,
+  Radio,
   Ticket,
   XCircle,
 } from "lucide-react";
 import type { PaymentMode } from "@shared/api-types";
 import { formatDateLong, formatINR, formatTimeRange } from "@shared/format";
+import { JOIN_CLOSES_MIN_AFTER_END, JOIN_OPENS_MIN_BEFORE } from "@shared/live";
 import type { BookingPageData, BookingView } from "@shared/pages/booking";
 import { useApi } from "@/lib/useApi";
 import { usePageMeta } from "@/lib/usePageMeta";
@@ -160,6 +162,8 @@ function PaidView({
         </div>
       </Card>
 
+      <LiveClassCard reg={reg} />
+
       {/* Joining instructions */}
       <section className="mt-8">
         <h2 className="font-display text-lg font-bold">Joining instructions</h2>
@@ -241,6 +245,35 @@ function PaidView({
         </ButtonLink>
       </div>
     </div>
+  );
+}
+
+/** Link to the in-browser live room for a paid booking, from 30 minutes before the class until the join window closes. */
+function LiveClassCard({ reg }: { reg: BookingView }) {
+  if (reg.sessionStatus === "cancelled") return null;
+  const start = new Date(reg.sessionStartsAt).getTime();
+  const now = Date.now();
+  if (now > start + (reg.sessionDurationMin + JOIN_CLOSES_MIN_AFTER_END) * 60_000) return null;
+  const open = now >= start - JOIN_OPENS_MIN_BEFORE * 60_000;
+  return (
+    <Card className="mt-6 flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <div className="flex gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
+          <Radio className="size-5" aria-hidden />
+        </span>
+        <div>
+          <h2 className="font-display text-lg font-bold">Join the live class</h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            {open
+              ? "The room is open. Watch the class, chat with the host and join polls right here in your browser."
+              : `Watch the class in your browser. The room opens ${JOIN_OPENS_MIN_BEFORE} minutes before the start — come back to this page then.`}
+          </p>
+        </div>
+      </div>
+      <ButtonLink href={`/live/${encodeURIComponent(reg.code)}`} variant="primary" className="shrink-0">
+        <Radio className="size-4" aria-hidden /> Join the live class
+      </ButtonLink>
+    </Card>
   );
 }
 

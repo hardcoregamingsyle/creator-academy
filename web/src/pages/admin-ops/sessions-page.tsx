@@ -94,6 +94,9 @@ export function Component() {
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right sm:px-6">
+                        <Link to={`/admin/sessions/${s.id}/live`} className="mr-4 text-sm font-semibold text-accent-strong hover:underline">
+                          Live room
+                        </Link>
                         <Link to={`/admin/sessions/${s.id}`} className="text-sm font-semibold text-accent-strong hover:underline">
                           Manage
                         </Link>

@@ -1,4 +1,4 @@
-import { execute, newId, nowIso, query } from "../db";
+import { batch, execute, newId, nowIso, query } from "../db";
 import { getWorkshop, listWorkshops, workshopMap } from "./workshops";
 import { normaliseEmail } from "./registrations";
 
@@ -130,6 +130,18 @@ export async function logEmail(entry: Omit<EmailLogEntry, "id" | "createdAt">): 
   await execute(
     `INSERT INTO email_log (id, to_email, subject, body_text, kind, status, error, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [newId(), entry.toEmail, entry.subject, entry.bodyText, entry.kind, entry.status, entry.error, nowIso()],
+  );
+}
+
+/** Several log rows in ONE round trip (one atomic batch) — for bulk sends. */
+export async function logEmails(entries: Omit<EmailLogEntry, "id" | "createdAt">[]): Promise<void> {
+  if (!entries.length) return;
+  const at = nowIso();
+  await batch(
+    entries.map((e) => ({
+      sql: `INSERT INTO email_log (id, to_email, subject, body_text, kind, status, error, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [newId(), e.toEmail, e.subject, e.bodyText, e.kind, e.status, e.error, at],
+    })),
   );
 }
 

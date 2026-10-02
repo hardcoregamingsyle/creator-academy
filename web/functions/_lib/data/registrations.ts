@@ -363,6 +363,33 @@ export async function listRegistrationsByEmail(email: string): Promise<Registrat
   return mapRegsWithSession(rows);
 }
 
+// ───────────────────────── 24h reminders ─────────────────────────
+
+/**
+ * Paid registrations due the automatic 24h reminder: the class is still scheduled and starts within the next
+ * 24h, nothing was sent yet, and the booking was made at least 24h before the class (later bookings got their
+ * confirmation email less than a day ahead, so they are skipped and never marked). Soonest class first.
+ */
+export async function listDueReminders(limit: number): Promise<RegistrationWithSession[]> {
+  const now = Date.now();
+  const rows = await query<RegWithSessionRow>(
+    `${SELECT_WITH_SESSION}
+     WHERE r.status = 'paid' AND r.reminder_sent_at IS NULL AND s.status = 'scheduled'
+       AND s.starts_at > ? AND s.starts_at <= ?
+       AND CAST(strftime('%s', r.created_at) AS INTEGER) <= CAST(strftime('%s', s.starts_at) AS INTEGER) - 86400
+     ORDER BY s.starts_at ASC, r.created_at ASC
+     LIMIT ?`,
+    [new Date(now).toISOString(), new Date(now + 24 * 3600_000).toISOString(), limit],
+  );
+  return mapRegsWithSession(rows);
+}
+
+/** Record that the reminder email went out for exactly these registrations. */
+export async function markRemindersSent(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  await execute(`UPDATE registrations SET reminder_sent_at = ? WHERE id IN (${ids.map(() => "?").join(",")})`, [nowIso(), ...ids]);
+}
+
 // ───────────────────────── mutations ─────────────────────────
 
 export async function setRegistrationOrderId(id: string, orderId: string): Promise<void> {

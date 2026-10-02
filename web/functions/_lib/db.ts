@@ -79,6 +79,10 @@ const MIGRATIONS: string[] = [
   "ALTER TABLE registrations ADD COLUMN covered_by_pass_id TEXT",
   // Struck-through "regular price" markup (display only). Existing rows get 90 immediately.
   "ALTER TABLE site_settings ADD COLUMN anchor_markup_percent INTEGER NOT NULL DEFAULT 90",
+  // Live classes: when the host pressed Start / End in the on-site room, and whether the 24h reminder email went out.
+  "ALTER TABLE class_sessions ADD COLUMN live_started_at TEXT",
+  "ALTER TABLE class_sessions ADD COLUMN live_ended_at TEXT",
+  "ALTER TABLE registrations ADD COLUMN reminder_sent_at TEXT",
 ];
 
 /** Small non-cryptographic string hash (djb2), base-36. */

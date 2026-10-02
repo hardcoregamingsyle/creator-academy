@@ -1,4 +1,5 @@
-import { formatDateLong, formatINR, formatTimeRange, monthLabel } from "../../shared/format";
+import { formatDateLong, formatDateShort, formatINR, formatTime, formatTimeRange, monthLabel } from "../../shared/format";
+import { JOIN_OPENS_MIN_BEFORE } from "../../shared/live";
 import { site, siteUrl } from "./site";
 import { getSiteSettings } from "./data/site-settings";
 import type { RegistrationWithSession } from "./data/registrations";
@@ -8,11 +9,16 @@ import type { EmailMessage } from "./email";
 
 /** Plain-text email templates. Keep them short, specific and friendly. */
 
-function joiningBlock(link: string | null): string {
-  return link
-    ? `Joining link: ${link}\nPlease join 5 minutes early so we can start on time.`
-    : `Your joining link will be emailed to you before the class. You can also find it on your booking page once it's ready.`;
+/** `onSiteLink`: the on-site class room (live classes), used when the session has no external meeting link. */
+function joiningBlock(link: string | null, onSiteLink?: string): string {
+  if (link) return `Joining link: ${link}\nPlease join 5 minutes early so we can start on time.`;
+  if (onSiteLink) {
+    return `Joining link: ${onSiteLink}\nThe class happens right on our website, so there is nothing to install. Please join 5 minutes early so we can start on time.`;
+  }
+  return `Your joining link will be emailed to you before the class. You can also find it on your booking page once it's ready.`;
 }
+
+const liveLink = (code: string) => `${siteUrl}/live/${code}`;
 
 export function workshopConfirmationEmail(reg: RegistrationWithSession): EmailMessage {
   const w = reg.workshop;
@@ -28,7 +34,7 @@ export function workshopConfirmationEmail(reg: RegistrationWithSession): EmailMe
         ? `Amount paid: ${formatINR(0)} — covered by your Monthly Pass`
         : `Amount paid: ${formatINR(reg.amountPaise)}${reg.discountPaise ? ` (includes ${formatINR(reg.discountPaise)} returning-student discount)` : ""}`,
     ].join("\n"),
-    joiningBlock(reg.meetingLink),
+    joiningBlock(reg.meetingLink, liveLink(reg.code)),
     w?.bring.length ? `Please have ready:\n${w.bring.map((b) => `• ${b}`).join("\n")}` : "",
     w ? `By the end of the class you'll have: ${w.outcome}.` : "",
     `Your booking page (keep this link): ${siteUrl}/booking/${reg.code}`,
@@ -51,7 +57,35 @@ export function sessionReminderEmail(reg: RegistrationWithSession): EmailMessage
     text: [
       `Hi ${reg.name.split(" ")[0]},`,
       `A quick reminder that ${title} starts ${formatDateLong(reg.sessionStartsAt)}, ${formatTimeRange(reg.sessionStartsAt, reg.sessionDurationMin)}.`,
-      joiningBlock(reg.meetingLink),
+      joiningBlock(reg.meetingLink, liveLink(reg.code)),
+      reg.workshop?.bring.length ? `Please have ready:\n${reg.workshop.bring.map((b) => `• ${b}`).join("\n")}` : "",
+      `Registration ID: ${reg.code}\nBooking page: ${siteUrl}/booking/${reg.code}`,
+      `— ${site.name}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    kind: "reminder",
+  };
+}
+
+/** The automatic reminder sent ~24h before a class (POST /api/internal/reminders). */
+export function liveReminderEmail(reg: RegistrationWithSession): EmailMessage {
+  const title = reg.workshop?.title ?? "your workshop";
+  const day = formatDateShort(reg.sessionStartsAt) === formatDateShort(new Date()) ? "Today" : "Tomorrow";
+  return {
+    to: reg.email,
+    subject: `${day}: ${title} at ${formatTime(reg.sessionStartsAt)} IST`,
+    text: [
+      `Hi ${reg.name.split(" ")[0]},`,
+      `A quick reminder that ${title} is ${day.toLowerCase()}.`,
+      [`Date: ${formatDateLong(reg.sessionStartsAt)}`, `Time: ${formatTimeRange(reg.sessionStartsAt, reg.sessionDurationMin)}`].join("\n"),
+      reg.meetingLink
+        ? joiningBlock(reg.meetingLink)
+        : [
+            `Join the class here: ${liveLink(reg.code)}`,
+            `The class happens on our website: no app and no Zoom needed. The room opens ${JOIN_OPENS_MIN_BEFORE} minutes before the start, so you can join early and check your sound.`,
+            `For the best experience use a laptop or desktop with Chrome, Edge, Safari or Firefox.`,
+          ].join("\n\n"),
       reg.workshop?.bring.length ? `Please have ready:\n${reg.workshop.bring.map((b) => `• ${b}`).join("\n")}` : "",
       `Registration ID: ${reg.code}\nBooking page: ${siteUrl}/booking/${reg.code}`,
       `— ${site.name}`,

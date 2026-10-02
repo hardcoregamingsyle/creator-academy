@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, Download, Mail, MessageSquareQuote, Plus, Trash2, UserCheck, Users } from "lucide-react";
+import { AlertTriangle, Download, Mail, MessageSquareQuote, Plus, Radio, Trash2, UserCheck, Users } from "lucide-react";
 import { formatDateLong, formatDateShort, formatINR, formatTime, formatTimeRange, toISTInputs } from "@shared/format";
 import {
   bulkEmailMessage,
@@ -13,7 +13,7 @@ import { ActionForm, ConfirmButton, SubmitButton, type ActionResult } from "@/co
 import { ApiErrorNotice } from "@/components/api-error-notice";
 import { NotFound } from "@/components/not-found";
 import { PageSkeleton } from "@/components/page-skeleton";
-import { Badge, Card, Eyebrow, Field, Input, Select, Textarea } from "@/components/ui";
+import { Badge, ButtonLink, Card, Eyebrow, Field, Input, Select, Textarea } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
 import { useSite } from "@/lib/site-context";
 import { useApi } from "@/lib/useApi";
@@ -97,6 +97,11 @@ function SessionDetail({ data, reload }: { data: AdminSessionDetailData; reload:
             <span className="inline-flex items-center gap-1.5 text-sm text-muted">
               <Users className="size-4" aria-hidden /> {session.paidCount}/{session.capacity} paid seats
             </span>
+            {session.status !== "cancelled" && (
+              <ButtonLink href={`/admin/sessions/${enc(session.id)}/live`} size="sm" variant="primary">
+                <Radio className="size-4" aria-hidden /> Open live room
+              </ButtonLink>
+            )}
           </div>
         </div>
       </div>

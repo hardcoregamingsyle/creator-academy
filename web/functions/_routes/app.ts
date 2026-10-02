@@ -30,6 +30,7 @@ import { routes as adminOps } from "./admin-ops";
 import { routes as booking } from "./booking";
 import { routes as catalogue } from "./catalogue";
 import { routes as feedback } from "./feedback";
+import { routes as live } from "./live";
 import { routes as pass } from "./pass";
 import { routes as publicCore } from "./public-core";
 import { routes as training } from "./training";
@@ -119,11 +120,13 @@ function isAllowedOrigin(origin: string, requestUrl: string): boolean {
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 // CSRF: browsers always attach Origin (or Sec-Fetch-Site) to cross-site writes.
-// Razorpay's server-to-server webhook carries neither and is verified by signature instead.
+// Razorpay's server-to-server webhook carries neither and is verified by signature instead; so is the room
+// Worker's reminder cron under /api/internal (Bearer CRON_SECRET).
 app.use("*", async (c, next) => {
   if (!UNSAFE_METHODS.has(c.req.method)) return next();
   const path = c.req.path;
   if (path === "/api/webhooks" || path.startsWith("/api/webhooks/")) return next();
+  if (path === "/api/internal" || path.startsWith("/api/internal/")) return next();
 
   const origin = c.req.header("origin");
   const allowed = origin
@@ -226,6 +229,7 @@ app.route("/", booking);
 app.route("/", training);
 app.route("/", pass);
 app.route("/", feedback);
+app.route("/", live);
 app.route("/", adminCore);
 app.route("/", adminOps);
 

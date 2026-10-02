@@ -1,4 +1,4 @@
-import { logEmail } from "./data/misc";
+import { logEmail, logEmails } from "./data/misc";
 import { site, siteUrl } from "./site";
 
 /**
@@ -16,6 +16,8 @@ export type EmailMessage = {
 };
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
+const RESEND_BATCH_ENDPOINT = "https://api.resend.com/emails/batch";
+const RESEND_BATCH_MAX = 100;
 /** Resend's shared sending address — works with no domain setup, good enough until a real domain is verified. */
 const SANDBOX_FROM = "onboarding@resend.dev";
 
@@ -43,8 +45,66 @@ export async function sendEmail(msg: EmailMessage): Promise<{ ok: boolean }> {
   }
 }
 
+function fromAddress(): string {
+  return process.env.EMAIL_FROM || `${site.name} <${SANDBOX_FROM}>`;
+}
+
+/**
+ * Send up to 100 emails in ONE Resend call (one HTTP request, one DB round trip for the log rows).
+ * Resolves to one boolean per message, in order: true = sent (or logged, when RESEND_API_KEY is
+ * unset), false = failed. A failed request fails every message, so callers can leave them for a retry.
+ */
+export async function sendEmailBatch(msgs: EmailMessage[]): Promise<boolean[]> {
+  if (msgs.length === 0) return [];
+  if (msgs.length > RESEND_BATCH_MAX) throw new Error(`sendEmailBatch: at most ${RESEND_BATCH_MAX} messages per call`);
+  const row = (m: EmailMessage, status: "sent" | "logged" | "failed", error: string | null) => ({
+    toEmail: m.to,
+    subject: m.subject,
+    bodyText: m.text,
+    kind: m.kind ?? "other",
+    status,
+    error,
+  });
+
+  if (!emailConfigured()) {
+    await logEmails(msgs.map((m) => row(m, "logged", null)));
+    return msgs.map(() => true);
+  }
+
+  const rejected = new Map<number, string>();
+  try {
+    const from = fromAddress();
+    const res = await fetch(RESEND_BATCH_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+        // One bad address must not sink the whole batch: Resend then reports the bad rows in `errors`.
+        "x-batch-validation": "permissive",
+      },
+      body: JSON.stringify(msgs.map((m) => ({ from, to: m.to, subject: m.subject, text: m.text, html: renderHtml(m.subject, m.text) }))),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Resend ${res.status}: ${body.slice(0, 300)}`);
+    }
+    const body = (await res.json().catch(() => null)) as { errors?: { index?: number; message?: string }[] } | null;
+    for (const e of body?.errors ?? []) if (typeof e.index === "number") rejected.set(e.index, e.message ?? "rejected");
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    console.error("[email] batch send via resend failed:", error);
+    await logEmails(msgs.map((m) => row(m, "failed", error))).catch((e) => console.error("[email] log failed:", e));
+    return msgs.map(() => false);
+  }
+  // The mail is out: a logging hiccup must not stop the caller from recording that it was sent.
+  await logEmails(msgs.map((m, i) => (rejected.has(i) ? row(m, "failed", rejected.get(i)!) : row(m, "sent", null)))).catch((e) =>
+    console.error("[email] log failed:", e),
+  );
+  return msgs.map((_, i) => !rejected.has(i));
+}
+
 async function sendViaResend(msg: EmailMessage): Promise<void> {
-  const from = process.env.EMAIL_FROM || `${site.name} <${SANDBOX_FROM}>`;
+  const from = fromAddress();
   const res = await fetch(RESEND_ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
