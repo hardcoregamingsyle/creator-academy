@@ -1,0 +1,14 @@
+name = "createva-proxy"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-09-24"
+# nodejs_compat also populates process.env from the vars/secrets below, so the
+# server code can keep reading process.env.X exactly as it did under Next.js.
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+NODE_ENV = "production"
+SITE_URL = "https://www.createva.co.in"
+CONTACT_EMAIL = "createva28@gmail.com"
+# Secrets (set with `wrangler pages secret put`): DATABASE_URL,
+# DATABASE_AUTH_TOKEN, ADMIN_PASSWORD, SESSION_SECRET, RESEND_API_KEY and,
+# when enabled, RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET.

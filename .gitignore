@@ -1,17 +1,14 @@
 node_modules
-.next
-out
-*.tsbuildinfo
-next-env.d.ts
+.DS_Store
 .env
 .env.local
-.env*.local
-data/*.db
-data/*.db-*
-.DS_Store
-
-# Cloudflare (OpenNext / Wrangler) build output and local state
-.open-next
+data/
 .wrangler
-.dev.vars
 .claude/scheduled_tasks.lock
+
+# leftovers from the old Next.js/OpenNext build, ignored locally
+.next
+.open-next
+out
+next-env.d.ts
+tsconfig.tsbuildinfo

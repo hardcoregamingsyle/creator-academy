@@ -1,0 +1,8 @@
+*.tsbuildinfo
+.dev.vars
+.env.local
+.wrangler
+dist
+dist-*
+dist-deploy
+node_modules

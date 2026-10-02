@@ -1,0 +1,13 @@
+User-Agent: *
+Allow: /
+Disallow: /admin
+# Only the admin API is blocked: /api/pages and /api/site must stay crawlable because
+# Googlebot renders the SPA through them. Their responses carry "X-Robots-Tag: noindex"
+# (set by the server), so the JSON itself stays out of search results.
+Disallow: /api/admin
+Disallow: /book
+Disallow: /booking
+Disallow: /training
+Disallow: /monthly-pass/
+
+Sitemap: https://www.createva.co.in/sitemap.xml
