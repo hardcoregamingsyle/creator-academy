@@ -9,6 +9,7 @@ compatibility_flags = ["nodejs_compat"]
 NODE_ENV = "production"
 SITE_URL = "https://www.createva.co.in"
 CONTACT_EMAIL = "createva28@gmail.com"
+LIVE_WS_URL = "wss://createva-live.hardcorgamingstyle.workers.dev/room"
 # Secrets (set with `wrangler pages secret put`): DATABASE_URL,
 # DATABASE_AUTH_TOKEN, ADMIN_PASSWORD, SESSION_SECRET, RESEND_API_KEY and,
 # when enabled, RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET.
