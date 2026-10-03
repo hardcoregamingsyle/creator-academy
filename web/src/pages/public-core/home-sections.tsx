@@ -23,6 +23,7 @@ import { ClassTimeline } from "@/components/class-timeline";
 import { Price } from "@/components/price";
 import { SeatsLeft } from "@/components/session-list";
 import { ButtonLink, Container, Eyebrow, Section, SectionHeading } from "@/components/ui";
+import { brand } from "@shared/brand";
 
 export function Hero({ next, workshopPaise, defaultCapacity }: { next: PublicSession | null; workshopPaise: number; defaultCapacity: number }) {
   return (
@@ -42,6 +43,9 @@ export function Hero({ next, workshopPaise, defaultCapacity }: { next: PublicSes
           <p className="mt-6 max-w-xl animate-fade-up text-lg text-muted [animation-delay:160ms] sm:text-xl">
             Practical creator skills through live workshops and personal training. Pick one skill, spend 90 minutes,
             and leave with something you actually made.
+          </p>
+          <p className="mt-3 max-w-xl animate-fade-up text-sm font-semibold text-ink-soft [animation-delay:200ms]">
+            Taught in {brand.software.join(" and ")}. Not a CapCut or free-app class.
           </p>
           <div className="mt-8 flex animate-fade-up flex-col gap-3 [animation-delay:240ms] sm:flex-row">
             <ButtonLink href="/classes" size="lg">

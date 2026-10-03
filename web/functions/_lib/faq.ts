@@ -37,8 +37,12 @@ export async function getFaqGroups(known: FaqContext = {}): Promise<FaqGroup[]> 
           a: "Yes. The Fundamentals workshops assume no prior experience. If a class needs some background, its page says so clearly.",
         },
         {
+          q: "Do you teach CapCut, Canva or other free apps?",
+          a: "No. CREATEVA teaches professional software only: Adobe Photoshop and Adobe Premiere Pro. We do not run classes on CapCut, Canva, mobile editing apps or other free tools. If that is what you want to learn, these classes are not the right fit.",
+        },
+        {
           q: "What software or equipment do I need?",
-          a: "Each class page lists what to have ready. Wherever possible we use free tools or free trials (for example the Premiere Pro or Photoshop free trial, Photopea, Audacity or OBS). A laptop or desktop is recommended for editing and design classes.",
+          a: "Each class page lists what to have ready. Classes are taught in Adobe Photoshop and Adobe Premiere Pro, so have them installed; Adobe offers a free trial of each if you have not bought them yet. A laptop or desktop is recommended for editing and design classes, and the live class room works in any modern browser.",
         },
         {
           q: "Where do the classes happen?",

@@ -307,7 +307,7 @@ const SEED_WORKSHOPS: WorkshopInput[] = [
       "Editors who want to offer thumbnails to clients",
     ],
     bring: [
-      "Adobe Photoshop (free trial) — or Photopea, a free browser alternative",
+      "Adobe Photoshop (Adobe offers a free trial if you do not own it yet)",
       "A photo of your subject/face or a screenshot from your video",
       "A video idea or title you want a thumbnail for",
     ],
@@ -368,7 +368,7 @@ const SEED_WORKSHOPS: WorkshopInput[] = [
     ],
     bring: [
       "One of your existing Shorts — or use our sample",
-      "Any editor you're comfortable with (Premiere Pro, CapCut, DaVinci Resolve…)",
+      "Adobe Premiere Pro (free trial available), with your project open",
     ],
   },
   {
@@ -398,7 +398,7 @@ const SEED_WORKSHOPS: WorkshopInput[] = [
       "Anyone recording on a phone or a budget mic",
       "Creators who've been told their audio is hard to hear",
     ],
-    bring: ["Any microphone — a phone mic is fine", "Audacity (free) or Premiere Pro / Audition", "Headphones"],
+    bring: ["Any microphone — a phone mic is fine", "Adobe Premiere Pro or Adobe Audition (free trials available)", "Headphones"],
   },
   {
     slug: "finding-video-ideas",

@@ -8,6 +8,7 @@ import { ApiErrorNotice } from "@/components/api-error-notice";
 import { CategoryIcon } from "@/components/brand";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { ButtonLink, Container, Eyebrow, Notice, cn } from "@/components/ui";
+import { SoftwareNotice } from "@/components/software-notice";
 import { WorkshopCard } from "@/components/workshop-card";
 import { useApi } from "@/lib/useApi";
 import { usePageMeta } from "@/lib/usePageMeta";
@@ -40,6 +41,7 @@ export function Component() {
         order. Join any class for {formatINR(workshopPricePaise)}, spend 90 minutes live with an instructor,
         and leave with something finished.
       </p>
+      <SoftwareNotice className="mt-6 max-w-2xl" />
 
       {/* ── category filter ── */}
       <nav aria-label="Filter by category" className="mt-8 flex flex-wrap gap-2">

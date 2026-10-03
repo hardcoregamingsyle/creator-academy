@@ -28,6 +28,7 @@ import { PageSkeleton } from "@/components/page-skeleton";
 import { Price } from "@/components/price";
 import { SeatsLeft } from "@/components/session-list";
 import { ButtonLink, Card, Container, Stars, buttonClass, cn } from "@/components/ui";
+import { SoftwareNotice } from "@/components/software-notice";
 import { WorkshopCard, WorkshopStatusBadge } from "@/components/workshop-card";
 import { useApi } from "@/lib/useApi";
 import { usePageMeta } from "@/lib/usePageMeta";
@@ -141,6 +142,7 @@ function WorkshopDetail({ data }: { data: ClassDetailPageData }) {
       </div>
       <h1 className="mt-4 text-3xl font-bold sm:text-4xl">{workshop.title}</h1>
       <p className="mt-4 max-w-2xl text-xl text-muted sm:text-2xl">{workshop.promise}</p>
+      <SoftwareNotice compact className="mt-3" />
 
       <dl className="mt-6 flex flex-wrap gap-x-6 gap-y-2.5">
         {facts.map((f) => (
