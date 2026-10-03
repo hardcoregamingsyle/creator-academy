@@ -1,12 +1,15 @@
 import { Hono, type Context } from "hono";
 import type {
+  BookingChangeOptions,
   BookingLookupResponse,
   BookingPageData,
   BookingSessionCore,
   BookPageData,
   DiscountCheckResponse,
+  MoveBookingResponse,
   PayDoneResponse,
   PayStartResponse,
+  RefundBookingResponse,
   ResendResponse,
   WorkshopBookingResponse,
 } from "../../shared/pages/booking";
@@ -33,6 +36,14 @@ import {
 import { sendEmail } from "../_lib/email";
 import { bookingLinksEmail, workshopConfirmationEmail } from "../_lib/email-templates";
 import { createRazorpayOrder, paymentMode, razorpayKeyId, verifyCheckoutSignature, verifyWebhookSignature } from "../_lib/payments";
+import { clientKey, hitRateLimit, TOO_MANY_REQUESTS_MESSAGE } from "../_lib/rate-limit";
+import {
+  evaluateWorkshopOptions,
+  listMoveAlternatives,
+  moveWorkshopBooking,
+  refundMethodNote,
+  refundWorkshopBooking,
+} from "../_lib/refunds";
 import { site, siteUrl } from "../_lib/site";
 import type { AppEnv } from "./types";
 import { isEmail, normalisePhone, notFound, str } from "./util";
@@ -109,6 +120,19 @@ routes.get("/pages/booking/:code", async (c) => {
 
   const paid = reg.status === "paid";
   const title = reg.workshop?.title ?? "your workshop";
+
+  let changeOptions: BookingChangeOptions | null = null;
+  if (paid) {
+    const options = evaluateWorkshopOptions(reg);
+    const alternatives = options.canMove ? await listMoveAlternatives(reg) : [];
+    changeOptions = {
+      ...options,
+      refundAmountPaise: reg.amountPaise,
+      refundMethodNote: refundMethodNote(reg),
+      alternatives: alternatives.map(publicSession),
+    };
+  }
+
   const payload: BookingPageData = {
     booking: {
       code: reg.code,
@@ -124,6 +148,8 @@ routes.get("/pages/booking/:code", async (c) => {
       meetingLink: paid ? reg.meetingLink : null,
       workshopSlug: reg.workshopSlug,
       workshop: reg.workshop,
+      refundAmountPaise: reg.status === "refunded" ? reg.refundAmountPaise : null,
+      refundedAt: reg.status === "refunded" ? reg.refundedAt : null,
     },
     returningDiscountPercent: settings.returningDiscountPercent,
     paymentMode: paymentMode(),
@@ -140,8 +166,43 @@ routes.get("/pages/booking/:code", async (c) => {
         })
       : null,
     contactEmail: site.contactEmail,
+    changeOptions,
   };
   return c.json(payload);
+});
+
+// ───────────────────────── self-service refund / move ─────────────────────────
+// The booking code is the credential (it is only ever emailed to the person who booked), same as the booking page.
+
+const CHANGE_LIMIT = { max: 10, windowSeconds: 3600 };
+
+/** Cancel a paid workshop booking and refund it (24h or more before the class, or any time if we cancelled it). */
+routes.post("/booking/:code/refund", async (c) => {
+  const reply = (payload: RefundBookingResponse, status: 200 | 404 | 409 | 429 | 502 = 200) => c.json(payload, status);
+  const hit = await hitRateLimit("booking-refund", clientKey(c), CHANGE_LIMIT.max, CHANGE_LIMIT.windowSeconds);
+  if (!hit.allowed) return reply({ ok: false, message: TOO_MANY_REQUESTS_MESSAGE }, 429);
+
+  const reg = await getRegistrationByCode(c.req.param("code"));
+  if (!reg) return reply({ ok: false, message: "We couldn't find that booking." }, 404);
+
+  const result = await refundWorkshopBooking(reg, { actor: "customer" });
+  if (!result.ok) return reply({ ok: false, message: result.message }, result.httpStatus);
+  return reply({ ok: true, message: result.message, status: result.status, amountPaise: result.amountPaise });
+});
+
+/** Move a paid workshop booking to another date of the same workshop, free. Body: { sessionId }. */
+routes.post("/booking/:code/move", async (c) => {
+  const reply = (payload: MoveBookingResponse, status: 200 | 400 | 404 | 409 | 429 = 200) => c.json(payload, status);
+  const hit = await hitRateLimit("booking-move", clientKey(c), CHANGE_LIMIT.max, CHANGE_LIMIT.windowSeconds);
+  if (!hit.allowed) return reply({ ok: false, message: TOO_MANY_REQUESTS_MESSAGE }, 429);
+
+  const body = await readJson(c);
+  const reg = await getRegistrationByCode(c.req.param("code"));
+  if (!reg) return reply({ ok: false, message: "We couldn't find that booking." }, 404);
+
+  const result = await moveWorkshopBooking(reg, str(body.sessionId, 64));
+  if (!result.ok) return reply({ ok: false, message: result.message }, result.httpStatus);
+  return reply({ ok: true, message: result.message, startsAt: result.startsAt, code: result.code });
 });
 
 /** The server half of the old /booking page: resolves a typed booking ID to the page it lives on. */

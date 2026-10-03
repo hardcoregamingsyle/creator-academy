@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowRight,
@@ -10,21 +11,25 @@ import {
   Mail,
   Send,
   Ticket,
+  Undo2,
   XCircle,
 } from "lucide-react";
 import { brand } from "@shared/brand";
-import { formatDateLong, formatINR, formatTimeRange } from "@shared/format";
+import { formatDateLong, formatDateTime, formatINR, formatTimeRange } from "@shared/format";
 import type { PaymentMode } from "@shared/api-types";
-import type { TrainingBookingPageData, TrainingBookingView } from "@shared/pages/training";
+import type { RefundBookingResponse } from "@shared/pages/booking";
+import type { TrainingBookingPageData, TrainingBookingView, TrainingChangeOptions } from "@shared/pages/training";
+import { api, errorMessage } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { usePageMeta } from "@/lib/usePageMeta";
 import { useRefetchOnNavigation } from "@/lib/useRefetchOnNavigation";
 import { ApiErrorNotice } from "@/components/api-error-notice";
+import { ConfirmDialog } from "@/components/booking/confirm-dialog";
 import { CopyButton } from "@/components/booking/copy-button";
 import { RetryPayment } from "@/components/booking/retry-payment";
 import { NotFound } from "@/components/not-found";
 import { PageSkeleton } from "@/components/page-skeleton";
-import { ButtonLink, Card, Container, Notice } from "@/components/ui";
+import { Button, ButtonLink, Card, Container, Notice } from "@/components/ui";
 
 function toUtcBasic(iso: string): string {
   return new Date(iso).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
@@ -55,11 +60,13 @@ export function Component() {
   if (!code || error?.status === 404) return <NotFound />;
   if (error) return <ApiErrorNotice error={error} onRetry={reload} />;
   if (!data) return <PageSkeleton />;
-  return <TrainingConfirmation data={data} />;
+  return <TrainingConfirmation data={data} reload={reload} />;
 }
 
-function TrainingConfirmation({ data }: { data: TrainingBookingPageData }) {
-  const { booking: b, paymentMode: mode, sessionInFuture, contactEmail, siteUrl } = data;
+function TrainingConfirmation({ data, reload }: { data: TrainingBookingPageData; reload: () => void }) {
+  const { booking: b, paymentMode: mode, sessionInFuture, contactEmail, siteUrl, changeOptions } = data;
+  // What the last refund said; kept here so it survives the reload that swaps the page into its refunded state.
+  const [flash, setFlash] = useState<string | null>(null);
 
   const gcalUrl = googleCalendarUrl({
     title: `Personal training: ${b.topic} — ${brand.name}`,
@@ -74,8 +81,23 @@ function TrainingConfirmation({ data }: { data: TrainingBookingPageData }) {
   return (
     <Container className="py-10 sm:py-14">
       <div className="mx-auto max-w-2xl">
+        {flash && (
+          <Notice tone="success" title="Booking cancelled" className="mb-8">
+            {flash}
+          </Notice>
+        )}
         {(b.status === "paid" || b.status === "completed") && (
-          <PaidView b={b} gcalUrl={gcalUrl} contactEmail={contactEmail} />
+          <PaidView
+            b={b}
+            gcalUrl={gcalUrl}
+            contactEmail={contactEmail}
+            changeOptions={changeOptions}
+            onCancelled={(message) => {
+              setFlash(message);
+              reload();
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
         )}
         {b.status === "pending" && (
           <PendingView b={b} mode={mode} sessionInFuture={sessionInFuture} contactEmail={contactEmail} />
@@ -90,7 +112,19 @@ function TrainingConfirmation({ data }: { data: TrainingBookingPageData }) {
 
 // ───────────────────────── paid / completed ─────────────────────────
 
-function PaidView({ b, gcalUrl, contactEmail }: { b: TrainingBookingView; gcalUrl: string; contactEmail: string }) {
+function PaidView({
+  b,
+  gcalUrl,
+  contactEmail,
+  changeOptions,
+  onCancelled,
+}: {
+  b: TrainingBookingView;
+  gcalUrl: string;
+  contactEmail: string;
+  changeOptions: TrainingChangeOptions | null;
+  onCancelled: (message: string) => void;
+}) {
   return (
     <div>
       <div className="mb-8 flex items-start gap-4">
@@ -208,6 +242,8 @@ function PaidView({ b, gcalUrl, contactEmail }: { b: TrainingBookingView; gcalUr
         </div>
       </section>
 
+      {changeOptions && <TrainingChangeOfPlans b={b} options={changeOptions} contactEmail={contactEmail} onCancelled={onCancelled} />}
+
       <div className="mt-10 flex flex-wrap gap-3 border-t border-line pt-8">
         <ButtonLink href="/schedule" variant="outline">
           Browse our classes <ArrowRight className="size-4" aria-hidden />
@@ -217,6 +253,102 @@ function PaidView({ b, gcalUrl, contactEmail }: { b: TrainingBookingView; gcalUr
         </ButtonLink>
       </div>
     </div>
+  );
+}
+
+/** "Change of plans?" for personal training: cancel for a refund 24h or more before the session; rescheduling is by email. */
+function TrainingChangeOfPlans({
+  b,
+  options,
+  contactEmail,
+  onCancelled,
+}: {
+  b: TrainingBookingView;
+  options: TrainingChangeOptions;
+  contactEmail: string;
+  onCancelled: (message: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const busy = useRef(false); // blocks a second click before React has re-rendered the disabled button
+  const free = options.refundAmountPaise <= 0;
+  const viaApi = options.refundMethodNote.startsWith("Refunded");
+  const mailto = `mailto:${contactEmail}?subject=${encodeURIComponent(`Booking ${b.code}: reschedule or refund request`)}`;
+
+  async function cancel() {
+    if (busy.current) return;
+    busy.current = true;
+    setPending(true);
+    setError(null);
+    try {
+      const res = await api.post<RefundBookingResponse>(`/api/training/${encodeURIComponent(b.code)}/refund`);
+      if (!res.ok) throw new Error(res.message);
+      setOpen(false);
+      onCancelled(res.message);
+    } catch (err) {
+      setError(errorMessage(err));
+      setOpen(false);
+    } finally {
+      busy.current = false;
+      setPending(false);
+    }
+  }
+
+  return (
+    <Card className="mt-10 p-5 sm:p-6">
+      <h2 className="font-display text-lg font-bold">Change of plans?</h2>
+      <p className="mt-1 text-sm text-ink-soft">{options.reason}</p>
+      <p className="mt-2 text-sm text-ink-soft">
+        To reschedule instead, email us and we will find a new time with you. Rescheduling is free up to 24 hours before the session.
+      </p>
+
+      {error && (
+        <Notice tone="error" className="mt-4">
+          {error}
+        </Notice>
+      )}
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        {options.canRefund && (
+          <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => setOpen(true)}>
+            <Undo2 className="size-4" aria-hidden /> {free ? "Cancel booking" : "Cancel and refund"}
+          </Button>
+        )}
+        <ButtonLink href={mailto} variant={options.canRefund ? "ghost" : "outline"} size="sm">
+          <Mail className="size-4" aria-hidden /> Email us
+        </ButtonLink>
+      </div>
+
+      {options.canRefund && options.deadlineAt && (
+        <p className="mt-4 text-xs text-muted">
+          Free cancellation closes {formatDateTime(options.deadlineAt)}, 24 hours before the session.
+        </p>
+      )}
+
+      {open && (
+        <ConfirmDialog
+          title={free ? "Cancel this booking?" : `Cancel and get ${formatINR(options.refundAmountPaise)} back?`}
+          busy={pending}
+          confirmLabel={free ? "Yes, cancel my booking" : `Yes, cancel and refund ${formatINR(options.refundAmountPaise)}`}
+          onConfirm={cancel}
+          onClose={() => setOpen(false)}
+        >
+          <ul className="mt-3 space-y-2 text-sm text-ink-soft">
+            {viaApi && !free ? (
+              <li>
+                <span className="font-semibold text-ink">{formatINR(options.refundAmountPaise)}</span>{" "}
+                {options.refundMethodNote.replace(/^Refunded/, "goes back")}
+              </li>
+            ) : (
+              <li>{options.refundMethodNote}</li>
+            )}
+            <li>Your time slot is released straight away, so it can go to someone else.</li>
+            <li className="font-semibold text-ink">This can&apos;t be undone.</li>
+          </ul>
+        </ConfirmDialog>
+      )}
+    </Card>
   );
 }
 
@@ -301,6 +433,12 @@ const statusCopy: Record<string, { title: string; body: string }> = {
 
 function OtherStatusView({ b, contactEmail }: { b: TrainingBookingView; contactEmail: string }) {
   const copy = statusCopy[b.status] ?? { title: "Booking status", body: "" };
+  const refundNote =
+    b.status === "refunded" && b.refundAmountPaise && !b.demoPayment
+      ? `${formatINR(b.refundAmountPaise)} is on its way back to your original payment method. It usually takes 5-7 business days to show up. Your time slot has been released.`
+      : b.status === "refunded" && b.demoPayment
+        ? "This was a test booking, so no real money was involved."
+        : null;
   return (
     <div>
       <div className="mb-8 flex items-start gap-4">
@@ -314,6 +452,11 @@ function OtherStatusView({ b, contactEmail }: { b: TrainingBookingView; contactE
           </p>
         </div>
       </div>
+      {refundNote && (
+        <Notice tone="success" className="mb-4">
+          {refundNote}
+        </Notice>
+      )}
       <Notice tone="info">
         Have questions about this booking? Contact us and quote your booking ID {b.code} — we&apos;ll help sort it
         out.

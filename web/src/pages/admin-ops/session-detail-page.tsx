@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, Download, Mail, MessageSquareQuote, Plus, Radio, Trash2, UserCheck, Users } from "lucide-react";
+import { AlertTriangle, Download, Mail, MessageSquareQuote, Plus, Radio, Trash2, Undo2, UserCheck, Users } from "lucide-react";
 import { formatDateLong, formatDateShort, formatINR, formatTime, formatTimeRange, toISTInputs } from "@shared/format";
 import {
   bulkEmailMessage,
   type AdminSessionDetailData,
   type BulkEmailResult,
+  type RefundAllResult,
   type RegistrationStatus,
   type SessionStatus,
 } from "@shared/pages/admin-ops";
@@ -32,6 +33,37 @@ const regStatusTone: Record<RegistrationStatus, "success" | "warning" | "danger"
 
 /** Recipients emailed per request, so one call stays within a Worker's CPU and subrequest budget. */
 const EMAIL_CHUNK = 5;
+
+/** Bookings refunded per request (each refund is a payment-provider call plus emails: several subrequests). */
+const REFUND_CHUNK = 3;
+
+/** Refunds a cancelled session's paid bookings in small chunks and adds the results up. Stops at the first chunk with a failure. */
+async function refundAllInChunks(url: string): Promise<ActionResult> {
+  let refunded = 0;
+  let manual = 0;
+  let remaining = 0;
+  try {
+    for (let i = 0; i < 100; i++) {
+      const fd = new FormData();
+      fd.set("limit", String(REFUND_CHUNK));
+      const res = await api.postForm<RefundAllResult>(url, fd);
+      if (res.attempted === 0 && !res.ok) return { ok: false, message: res.message };
+      refunded += res.refunded;
+      manual += res.manual;
+      remaining = res.remaining;
+      if (res.failed > 0) {
+        return { ok: false, message: `${refunded} refunded so far. ${res.message} Try again: refunds already made are never repeated.` };
+      }
+      if (res.remaining === 0 || res.attempted === 0) break;
+    }
+  } catch (err) {
+    return { ok: false, message: `${errorMessage(err)} ${refunded} refunded before the error. Press the button again to continue.` };
+  }
+  return {
+    ok: true,
+    message: `${refunded} refunded through Razorpay${manual ? `, ${manual} cancelled for a manual refund` : ""}. ${remaining} paid booking${remaining === 1 ? "" : "s"} left.`,
+  };
+}
 
 export function Component() {
   const { id } = useParams();
@@ -266,6 +298,22 @@ function SessionDetail({ data, reload }: { data: AdminSessionDetailData; reload:
               <MessageSquareQuote className="size-4" aria-hidden /> Send feedback request to attendees
             </SubmitButton>
           </ActionForm>
+
+          {session.status === "cancelled" && paidCount > 0 && (
+            <div>
+              <ActionForm action={() => refundAllInChunks(`${base}/refund-all`)} onDone={() => reload()}>
+                <ConfirmButton
+                  variant="danger"
+                  message={`Refund all ${paidCount} paid booking${paidCount === 1 ? "" : "s"} of this cancelled class?\n\nPaid-through-Razorpay bookings are refunded in full to the original payment method; each student is emailed. This cannot be undone.`}
+                >
+                  <Undo2 className="size-4" aria-hidden /> Refund all paid bookings ({paidCount})
+                </ConfirmButton>
+              </ActionForm>
+              <p className="mt-2 text-xs text-muted">
+                Students can also refund or move themselves from their booking page. Bookings not paid through Razorpay are cancelled and need a manual refund.
+              </p>
+            </div>
+          )}
         </div>
       </Card>
 
@@ -308,7 +356,7 @@ function SessionDetail({ data, reload }: { data: AdminSessionDetailData; reload:
           <ActionForm action={postTo(`${base}/cancel`)} onDone={(r) => r.ok && reload()}>
             <ConfirmButton
               variant="outline"
-              message="Cancel this session? Any refunds must be processed manually in the Razorpay dashboard."
+              message="Cancel this session? Students will be able to refund or move themselves from their booking page, and you can refund everyone at once from this page afterwards."
             >
               Cancel session
             </ConfirmButton>

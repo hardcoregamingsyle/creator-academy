@@ -165,11 +165,11 @@ function Lobby({ code, info, room, reload }: { code: string; info: LiveJoinInfo;
             {status === "ended" && <Notice tone="info" title="This class has ended">Thanks for joining. We&apos;d love to hear how it went — you&apos;ll get a short feedback form by email.</Notice>}
             {status === "cancelled" && (
               <Notice tone="warning" title="This class was cancelled">
-                We&apos;ll be in touch about a refund or a transfer to another date. See your{" "}
+                You can choose a full refund or a free move to another date on your{" "}
                 <Link to={`/booking/${encodeURIComponent(code)}`} className="font-semibold underline underline-offset-2">
                   booking page
-                </Link>{" "}
-                for details.
+                </Link>
+                , any time.
               </Notice>
             )}
 

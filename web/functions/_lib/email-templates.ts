@@ -171,6 +171,108 @@ export function monthlyPassConfirmationEmail(pass: MonthlyPass): EmailMessage {
   };
 }
 
+// ───────────────────────── refunds & moves ─────────────────────────
+
+/** What happened to a cancelled booking's money: refunded through Razorpay / the demo flow, left for a manual refund, or nothing was paid. */
+export type RefundOutcome = "razorpay" | "demo" | "manual" | "free";
+
+export type RefundNoticeInfo = {
+  product: "workshop" | "training";
+  code: string;
+  name: string;
+  email: string;
+  /** Workshop title, or "Personal training: <topic>". */
+  title: string;
+  startsAt: string;
+  amountPaise: number;
+  outcome: RefundOutcome;
+  refundId: string | null;
+  actor: "customer" | "admin";
+  /** The class was cancelled by us (workshops only). */
+  cancelledByUs: boolean;
+};
+
+/** To the customer after a successful cancel/refund. */
+export function refundCustomerEmail(i: RefundNoticeInfo): EmailMessage {
+  const first = i.name.split(" ")[0];
+  const bookingUrl = `${siteUrl}/${i.product === "workshop" ? "booking" : "training"}/${i.code}`;
+  const what = `${i.product === "workshop" ? "Registration" : "Booking"} ID: ${i.code}\n${i.title}\nDate: ${formatDateLong(i.startsAt)}, ${formatTime(i.startsAt)} IST`;
+  let headline: string;
+  if (i.outcome === "razorpay" || i.outcome === "demo") {
+    headline =
+      `Your booking has been cancelled and a full refund of ${formatINR(i.amountPaise)} is on its way. ` +
+      `It goes back to your original payment method and usually takes 5-7 business days to show up.` +
+      (i.outcome === "demo" ? " (This was a test booking, so no real money was involved.)" : "");
+  } else if (i.outcome === "manual") {
+    headline =
+      `Your booking has been cancelled. It wasn't paid through our website checkout, so our team will refund ` +
+      `${formatINR(i.amountPaise)} to you manually and email you once it's done.`;
+  } else {
+    headline = `Your booking has been cancelled. Nothing was charged for it, so there is nothing to refund.`;
+  }
+  return {
+    to: i.email,
+    subject: `Booking cancelled${i.outcome === "razorpay" || i.outcome === "demo" ? ` — refund of ${formatINR(i.amountPaise)} on its way` : ""} (${i.code})`,
+    text: [
+      `Hi ${first},`,
+      headline,
+      what,
+      `Your seat has been released and this can't be undone. If you change your mind you're welcome to book again (subject to availability): ${siteUrl}/schedule`,
+      `Booking page: ${bookingUrl}`,
+      `Questions? Just reply to this email or write to ${site.contactEmail} and quote ${i.code}.`,
+      `— ${site.name}`,
+    ].join("\n\n"),
+    kind: i.product === "workshop" ? "booking" : "training",
+  };
+}
+
+/** Short notice to the owner contact address: a refund went out, or one needs doing by hand. */
+export function refundOwnerEmail(i: RefundNoticeInfo): EmailMessage {
+  const manual = i.outcome === "manual";
+  const how =
+    i.outcome === "razorpay"
+      ? `Refunded through Razorpay (refund ${i.refundId ?? "n/a"}), 5-7 business days to the customer.`
+      : i.outcome === "demo"
+        ? "Test (demo) booking: no real money."
+        : manual
+          ? "ACTION NEEDED: this booking was not paid through Razorpay checkout. Please refund the customer manually."
+          : "Nothing was paid (for example covered by a Monthly Pass), so there is nothing to refund.";
+  return {
+    to: site.contactEmail,
+    subject: `${manual ? "ACTION NEEDED: manual refund" : "Refund"} ${i.code} — ${formatINR(i.amountPaise)} (${i.product})`,
+    text: [
+      `${i.name} <${i.email}> ${i.actor === "admin" ? "was refunded from the admin dashboard" : "cancelled their booking themselves"}${i.cancelledByUs ? " (class cancelled by us)" : ""}.`,
+      `Code: ${i.code}\n${i.title}\nDate: ${formatDateLong(i.startsAt)}, ${formatTime(i.startsAt)} IST\nAmount: ${formatINR(i.amountPaise)}`,
+      how,
+      `The seat has been released.`,
+    ].join("\n\n"),
+    kind: "other",
+  };
+}
+
+/** To the student after they moved their booking to another date. */
+export function workshopMovedEmail(reg: RegistrationWithSession): EmailMessage {
+  const title = reg.workshop?.title ?? "your workshop";
+  return {
+    to: reg.email,
+    subject: `You're moved: ${title} — ${formatDateLong(reg.sessionStartsAt)}`,
+    text: [
+      `Hi ${reg.name.split(" ")[0]},`,
+      `Your booking has been moved to a new date. Nothing to pay and your registration ID stays the same.`,
+      [
+        `Registration ID: ${reg.code}`,
+        `New date: ${formatDateLong(reg.sessionStartsAt)}`,
+        `Time: ${formatTimeRange(reg.sessionStartsAt, reg.sessionDurationMin)}`,
+      ].join("\n"),
+      joiningBlock(reg.meetingLink, liveLink(reg.code)),
+      `Your booking page: ${siteUrl}/booking/${reg.code}`,
+      `We'll send a reminder about 24 hours before the class. Questions? Write to ${site.contactEmail}.`,
+      `— ${site.name}`,
+    ].join("\n\n"),
+    kind: "booking",
+  };
+}
+
 /** "Here are your bookings" — sent when a student looks up their bookings by email. */
 export function bookingLinksEmail(
   email: string,

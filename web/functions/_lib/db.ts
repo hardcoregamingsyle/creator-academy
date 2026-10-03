@@ -83,6 +83,16 @@ const MIGRATIONS: string[] = [
   "ALTER TABLE class_sessions ADD COLUMN live_started_at TEXT",
   "ALTER TABLE class_sessions ADD COLUMN live_ended_at TEXT",
   "ALTER TABLE registrations ADD COLUMN reminder_sent_at TEXT",
+  // Self-service refunds / moves (functions/_lib/refunds.ts): Razorpay refund id + when + how much, how often a booking
+  // was moved to another date, and the session it was first booked on.
+  "ALTER TABLE registrations ADD COLUMN refund_id TEXT",
+  "ALTER TABLE registrations ADD COLUMN refunded_at TEXT",
+  "ALTER TABLE registrations ADD COLUMN refund_amount_paise INTEGER",
+  "ALTER TABLE registrations ADD COLUMN moved_count INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE registrations ADD COLUMN original_session_id TEXT",
+  "ALTER TABLE training_bookings ADD COLUMN refund_id TEXT",
+  "ALTER TABLE training_bookings ADD COLUMN refunded_at TEXT",
+  "ALTER TABLE training_bookings ADD COLUMN refund_amount_paise INTEGER",
 ];
 
 /** Small non-cryptographic string hash (djb2), base-36. */

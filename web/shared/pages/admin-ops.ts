@@ -116,6 +116,8 @@ export type AdminBookingRow = {
   createdAt: string;
   /** Pending for longer than the seat hold (evaluated when the request was served). */
   abandoned: boolean;
+  /** Paid through Razorpay with a payment id: the "Refund via Razorpay" button can refund it automatically. */
+  autoRefundable: boolean;
 };
 
 /** GET /api/admin/bookings?status=…&q=… */
@@ -180,6 +182,25 @@ export type AdminTrainingBooking = {
   status: TrainingStatus;
   goals: string | null;
   meetingLink: string | null;
+  /** Paid through Razorpay with a payment id: can be refunded automatically. */
+  autoRefundable: boolean;
+};
+
+/**
+ * Result of POST /api/admin/sessions/:id/refund-all. Each call refunds at most `limit` paid bookings of a cancelled
+ * session (the SPA sends a small limit and repeats while `remaining > 0`, to stay inside a Worker's subrequest budget).
+ */
+export type RefundAllResult = ActionResult & {
+  /** Bookings handled in this call. */
+  attempted: number;
+  /** Refunded through Razorpay (or test bookings marked refunded). */
+  refunded: number;
+  /** Cancelled but needing a manual refund (not paid through Razorpay), or nothing to refund. */
+  manual: number;
+  /** Razorpay refused or the booking changed meanwhile: still paid, safe to retry. */
+  failed: number;
+  /** Paid bookings still left on the session after this call. */
+  remaining: number;
 };
 
 /** GET /api/admin/training?tab=upcoming|past — `slots` are always the upcoming ones; `tab` only filters `bookings`. */

@@ -260,8 +260,15 @@ function RefundsContent({ site }: { site: SiteInfo }) {
 
       <PolicySection heading="3. How to request a refund or transfer">
         <p>
-          Email {site.contactEmail} with your registration ID (from your confirmation email) and what you'd like — a
-          refund or a transfer to another date.
+          The quickest way is to do it yourself: open your booking page (the link is in your confirmation email) and
+          choose a refund or a move to another date. You can do this any time up to 24 hours before a group workshop
+          starts, and at any time if we cancel the class. You can cancel a personal training booking for a refund the
+          same way, up to 24 hours before the session; rescheduling a personal training session is done by email.
+        </p>
+        <p>
+          Otherwise, for example if it's less than 24 hours before or something doesn't work, email {site.contactEmail}{" "}
+          with your registration ID (from your confirmation email) and what you'd like — a refund or a transfer to
+          another date.
         </p>
       </PolicySection>
 

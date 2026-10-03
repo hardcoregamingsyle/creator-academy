@@ -1,12 +1,12 @@
-import type { FormEvent, ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Download, Search } from "lucide-react";
 import { formatDateShort, formatINR, formatTime, timeAgo } from "@shared/format";
 import type { AdminBookingsPageData, BookingStatusFilter } from "@shared/pages/admin-ops";
-import { ActionForm, ConfirmButton } from "@/components/admin-ui";
+import { ActionForm, ConfirmButton, type ActionResult } from "@/components/admin-ui";
 import { ApiErrorNotice } from "@/components/api-error-notice";
 import { PageSkeleton } from "@/components/page-skeleton";
-import { Badge, Button, Card, Input, cn } from "@/components/ui";
+import { Badge, Button, Card, Input, Notice, cn } from "@/components/ui";
 import { useApi } from "@/lib/useApi";
 import { usePageMeta } from "@/lib/usePageMeta";
 import { enc, postTo } from "./post";
@@ -46,6 +46,8 @@ export function Component() {
     `/api/admin/bookings?status=${statusFilter}${q ? `&q=${enc(q)}` : ""}`,
   );
   const shown = useKeepPrevious(data);
+  // Result of the last "Refund via Razorpay": the row changes (and its form unmounts) on success, so the message lives up here.
+  const [refundResult, setRefundResult] = useState<ActionResult | null>(null);
 
   if (error) return <ApiErrorNotice error={error} onRetry={reload} />;
   if (!shown) return <PageSkeleton bare />;
@@ -77,6 +79,12 @@ export function Component() {
           Download CSV
         </a>
       </div>
+
+      {refundResult && (
+        <Notice tone="success" className="mt-6">
+          {refundResult.message}
+        </Notice>
+      )}
 
       {/* summary */}
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -194,6 +202,26 @@ export function Component() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1.5">
+                    {r.status === "paid" && r.autoRefundable && (
+                      <ActionForm
+                        action={postTo(`/api/admin/bookings/${enc(r.id)}/refund`)}
+                        onDone={(res) => {
+                          // Success: the row changes and this form goes away, so say it at the top. Failures show right here.
+                          if (!res.ok) return;
+                          setRefundResult(res);
+                          reload();
+                        }}
+                        quiet
+                      >
+                        <ConfirmButton
+                          message={`Refund ${formatINR(r.amountPaise)} to ${r.name} through Razorpay?\n\nThis cancels the registration, releases the seat and emails the student. It cannot be undone.`}
+                          variant="primary"
+                          size="sm"
+                        >
+                          Refund via Razorpay ({formatINR(r.amountPaise)})
+                        </ConfirmButton>
+                      </ActionForm>
+                    )}
                     {r.status !== "paid" && (
                       <StatusForm id={r.id} status="paid" onDone={reload}>
                         <ConfirmButton message={`Mark ${r.name}'s registration as paid (manual)?`} variant="outline" size="sm">
@@ -203,8 +231,11 @@ export function Component() {
                     )}
                     {r.status !== "refunded" && (
                       <StatusForm id={r.id} status="refunded" onDone={reload}>
-                        <ConfirmButton message={`Mark ${r.name}'s registration as refunded?`} size="sm">
-                          Refund
+                        <ConfirmButton
+                          message={`Mark ${r.name}'s registration as refunded? This only changes the status: no money is sent.`}
+                          size="sm"
+                        >
+                          Mark refunded
                         </ConfirmButton>
                       </StatusForm>
                     )}

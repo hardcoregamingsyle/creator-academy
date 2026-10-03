@@ -1,11 +1,11 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { formatDateShort, formatINR, formatTime } from "@shared/format";
 import type { AdminTrainingBooking, AdminTrainingPageData, TrainingStatus } from "@shared/pages/admin-ops";
-import { ActionForm, ConfirmButton, SubmitButton } from "@/components/admin-ui";
+import { ActionForm, ConfirmButton, SubmitButton, type ActionResult } from "@/components/admin-ui";
 import { ApiErrorNotice } from "@/components/api-error-notice";
 import { PageSkeleton } from "@/components/page-skeleton";
-import { Badge, Card, Field, Input, Select, cn } from "@/components/ui";
+import { Badge, Card, Field, Input, Notice, Select, cn } from "@/components/ui";
 import { useApi } from "@/lib/useApi";
 import { usePageMeta } from "@/lib/usePageMeta";
 import { enc, postTo } from "./post";
@@ -26,6 +26,8 @@ export function Component() {
   const scope = params.get("tab") === "past" ? "past" : "upcoming";
   const { data, error, reload } = useApi<AdminTrainingPageData>(`/api/admin/training?tab=${scope}`);
   const shown = useKeepPrevious(data);
+  // Message of the last successful "Refund via Razorpay" (the row changes and its form goes away, so it is said up here).
+  const [refundResult, setRefundResult] = useState<ActionResult | null>(null);
 
   if (error) return <ApiErrorNotice error={error} onRetry={reload} />;
   if (!shown) return <PageSkeleton bare />;
@@ -36,6 +38,11 @@ export function Component() {
     <div>
       <h1 className="text-3xl font-bold sm:text-4xl">Personal training</h1>
       <p className="mt-2 text-muted">Publish available times and manage 1:1 bookings.</p>
+      {refundResult && (
+        <Notice tone="success" className="mt-4">
+          {refundResult.message}
+        </Notice>
+      )}
 
       {/* ── available time slots ── */}
       <section className="mt-10">
@@ -201,6 +208,26 @@ export function Component() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-1.5">
+                      {b.status === "paid" && b.autoRefundable && (
+                        <ActionForm
+                          action={postTo(`/api/admin/training/bookings/${enc(b.id)}/refund`)}
+                          onDone={(res) => {
+                            if (!res.ok) return;
+                            setRefundResult(res);
+                            reload();
+                          }}
+                          quiet
+                        >
+                          <ConfirmButton
+                            message={`Refund ${formatINR(b.amountPaise)} to ${b.name} through Razorpay?\n\nThis cancels the session, releases the slot and emails the student. It cannot be undone.`}
+                            variant="primary"
+                            size="sm"
+                            className="w-full"
+                          >
+                            Refund via Razorpay ({formatINR(b.amountPaise)})
+                          </ConfirmButton>
+                        </ActionForm>
+                      )}
                       {(["completed", "cancelled", "refunded"] as TrainingStatus[])
                         .filter((s) => s !== b.status)
                         .map((s) => (

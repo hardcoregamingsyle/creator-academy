@@ -41,6 +41,9 @@ export type TrainingBooking = {
   meetingLink: string | null;
   createdAt: string;
   paidAt: string | null;
+  refundId: string | null;
+  refundedAt: string | null;
+  refundAmountPaise: number | null;
 };
 
 type BookingRow = {
@@ -62,6 +65,9 @@ type BookingRow = {
   meeting_link: string | null;
   created_at: string;
   paid_at: string | null;
+  refund_id: string | null;
+  refunded_at: string | null;
+  refund_amount_paise: number | null;
 };
 
 function mapBooking(r: BookingRow): TrainingBooking {
@@ -84,6 +90,9 @@ function mapBooking(r: BookingRow): TrainingBooking {
     meetingLink: r.meeting_link,
     createdAt: r.created_at,
     paidAt: r.paid_at,
+    refundId: r.refund_id ?? null,
+    refundedAt: r.refunded_at ?? null,
+    refundAmountPaise: r.refund_amount_paise === null || r.refund_amount_paise === undefined ? null : Number(r.refund_amount_paise),
   };
 }
 
@@ -357,6 +366,9 @@ export async function createPendingTrainingBooking(input: TrainingBookingInput):
     meetingLink: null,
     createdAt: nowIso(),
     paidAt: null,
+    refundId: null,
+    refundedAt: null,
+    refundAmountPaise: null,
   };
   // Insert only if nobody else holds this slot — checked in the same statement
   // so two students can't book the same 1:1 time.
@@ -448,14 +460,17 @@ export async function setTrainingOrderId(id: string, orderId: string): Promise<v
   ]);
 }
 
-/** Idempotent — returns true only the first time the booking becomes paid. */
+/**
+ * Idempotent — returns true only the first time the booking becomes paid. A refunded booking is never flipped back
+ * to paid by a late/replayed payment webhook (see markRegistrationPaid).
+ */
 export async function markTrainingPaid(
   id: string,
   payment: { provider: "razorpay" | "demo" | "manual"; paymentId?: string | null },
 ): Promise<boolean> {
   const changed = await execute(
     `UPDATE training_bookings SET status = 'paid', payment_provider = ?, provider_payment_id = ?, paid_at = ?
-     WHERE id = ? AND status NOT IN ('paid', 'completed')`,
+     WHERE id = ? AND status NOT IN ('paid', 'completed', 'refunded') AND refund_id IS NULL`,
     [payment.provider, payment.paymentId ?? null, nowIso(), id],
   );
   return changed > 0;

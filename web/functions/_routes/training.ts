@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import type { RefundBookingResponse } from "../../shared/pages/booking";
 import type {
   PersonalTrainingPageData,
   TrainingBookResponse,
   TrainingBookingPageData,
+  TrainingChangeOptions,
 } from "../../shared/pages/training";
 import { getSiteSettings } from "../_lib/data/site-settings";
 import {
@@ -14,6 +16,8 @@ import {
 } from "../_lib/data/training";
 import { getFaqGroups } from "../_lib/faq";
 import { paymentMode } from "../_lib/payments";
+import { clientKey, hitRateLimit, TOO_MANY_REQUESTS_MESSAGE } from "../_lib/rate-limit";
+import { evaluateTrainingOptions, refundMethodNote, refundTrainingBooking } from "../_lib/refunds";
 import { site, siteUrl } from "../_lib/site";
 import type { AppEnv } from "./types";
 import { badRequest, isEmail, normalisePhone, notFound, str } from "./util";
@@ -47,6 +51,12 @@ routes.get("/pages/training/:code", async (c) => {
   const b = await getTrainingBookingByCode(c.req.param("code"));
   if (!b) return notFound(c);
 
+  let changeOptions: TrainingChangeOptions | null = null;
+  if (b.status === "paid") {
+    const options = evaluateTrainingOptions(b);
+    changeOptions = { ...options, refundAmountPaise: b.amountPaise, refundMethodNote: refundMethodNote(b) };
+  }
+
   const payload: TrainingBookingPageData = {
     booking: {
       code: b.code,
@@ -60,13 +70,30 @@ routes.get("/pages/training/:code", async (c) => {
       demoPayment: b.paymentProvider === "demo",
       // The private session URL only goes to a paid booking (as on the workshop booking page); never pending/refunded/cancelled/failed.
       meetingLink: b.status === "paid" || b.status === "completed" ? b.meetingLink : null,
+      refundAmountPaise: b.status === "refunded" ? b.refundAmountPaise : null,
+      refundedAt: b.status === "refunded" ? b.refundedAt : null,
     },
     paymentMode: paymentMode(),
     sessionInFuture: new Date(b.startsAt).getTime() > Date.now(),
     contactEmail: site.contactEmail,
     siteUrl,
+    changeOptions,
   };
   return c.json(payload);
+});
+
+/** Cancel a paid personal-training booking and refund it (24h or more before the session). The code is the credential. */
+routes.post("/training/:code/refund", async (c) => {
+  const reply = (payload: RefundBookingResponse, status: 200 | 404 | 409 | 429 | 502 = 200) => c.json(payload, status);
+  const hit = await hitRateLimit("training-refund", clientKey(c), 10, 3600);
+  if (!hit.allowed) return reply({ ok: false, message: TOO_MANY_REQUESTS_MESSAGE }, 429);
+
+  const b = await getTrainingBookingByCode(c.req.param("code"));
+  if (!b) return reply({ ok: false, message: "We couldn't find that booking." }, 404);
+
+  const result = await refundTrainingBooking(b, { actor: "customer" });
+  if (!result.ok) return reply({ ok: false, message: result.message }, result.httpStatus);
+  return reply({ ok: true, message: result.message, status: result.status, amountPaise: result.amountPaise });
 });
 
 /** Create a pending 1:1 personal training booking. */

@@ -13,6 +13,7 @@ import {
   type AdminTrainingPageData,
   type BookingStatusFilter,
   type BulkEmailResult,
+  type RefundAllResult,
 } from "../../shared/pages/admin-ops";
 import { query } from "../_lib/db";
 import { emailConfigured, sendEmail } from "../_lib/email";
@@ -23,6 +24,8 @@ import { interestCounts, listContactMessages, listEmailLog, listInterest, setCon
 import { listPasses, markPassPaid, passesOnSale, setPassStatus, type MonthlyPassStatus } from "../_lib/data/monthly-pass";
 import {
   addManualRegistration,
+  getRegistrationById,
+  listPaidRegistrationIds,
   listRegistrations,
   markAllAttended,
   markRegistrationPaid,
@@ -30,6 +33,7 @@ import {
   setRegistrationStatus,
   type RegistrationStatus,
 } from "../_lib/data/registrations";
+import { isAutoRefundable, refundTrainingBooking, refundWorkshopBooking } from "../_lib/refunds";
 import { createSession, deleteSession, getSession, listSessions, updateSession, type SessionStatus } from "../_lib/data/sessions";
 import { getSiteSettings } from "../_lib/data/site-settings";
 import {
@@ -258,7 +262,64 @@ routes.post("/admin/sessions/:id/cancel", async (c) => {
   if (!existing) return c.json(fail("Session not found."));
 
   await updateSession(id, { status: "cancelled" });
-  return c.json(ok("Session cancelled. Remember: any refunds must be processed manually in the Razorpay dashboard."));
+  return c.json(
+    ok(
+      "Session cancelled. Students can now choose a refund or a free move from their booking page, at any time. " +
+        "You can also refund every paid booking yourself with \"Refund all paid bookings\" on this page, or one by one with the Refund via Razorpay buttons on the Bookings page.",
+    ),
+  );
+});
+
+const REFUND_ALL_MAX = 40;
+
+/**
+ * Refund the paid bookings of a CANCELLED session (admin override: no 24h rule, but the same claim-first safety).
+ * Sequential, at most `limit` per call (default 3, hard cap 40); each refund costs several subrequests, so the SPA
+ * calls this repeatedly while `remaining > 0` to stay inside a Worker's budget.
+ */
+routes.post("/admin/sessions/:id/refund-all", async (c) => {
+  const sessionId = str(c.req.param("id"), 64);
+  const fail2 = (message: string): RefundAllResult => ({ ok: false, message, attempted: 0, refunded: 0, manual: 0, failed: 0, remaining: 0 });
+  if (!sessionId) return c.json(fail2("Missing session."));
+  const formData = await readFormData(c);
+  const limit = Math.min(REFUND_ALL_MAX, Math.max(1, Math.floor(Number(formData.get("limit")) || 3)));
+
+  const session = await getSession(sessionId);
+  if (!session) return c.json(fail2("Session not found."));
+  if (session.status !== "cancelled") return c.json(fail2("Cancel the session first: refunding everyone only makes sense for a cancelled class."));
+
+  const ids = await listPaidRegistrationIds(sessionId, limit);
+  let refunded = 0;
+  let manual = 0;
+  let failed = 0;
+  let lastError = "";
+  for (const id of ids) {
+    const reg = await getRegistrationById(id);
+    if (!reg) continue;
+    const res = await refundWorkshopBooking(reg, { actor: "admin" });
+    if (!res.ok) {
+      failed++;
+      lastError = res.message;
+    } else if (res.outcome === "razorpay" || res.outcome === "demo") refunded++;
+    else manual++;
+  }
+  const rows = await query<{ n: number }>(`SELECT COUNT(*) AS n FROM registrations WHERE session_id = ? AND status = 'paid'`, [sessionId]);
+  const remaining = Number(rows[0]?.n ?? 0);
+
+  const result: RefundAllResult = {
+    ok: failed === 0,
+    message:
+      `${refunded} refunded through Razorpay` +
+      (manual ? `, ${manual} cancelled for a manual refund` : "") +
+      (failed ? `, ${failed} could not be refunded and are still paid (${lastError})` : "") +
+      `. ${remaining} paid booking${remaining === 1 ? "" : "s"} left on this session.`,
+    attempted: ids.length,
+    refunded,
+    manual,
+    failed,
+    remaining,
+  };
+  return c.json(result);
 });
 
 /** The client navigates back to /admin/sessions when this succeeds (the old action redirected there). */
@@ -394,10 +455,18 @@ routes.post("/admin/registrations/:id/status", async (c) => {
   const status = str(formData.get("status"), 20);
   if (!(REG_STATUSES_SETTABLE as readonly string[]).includes(status)) return c.json(fail("Invalid status."));
 
-  if (status === "paid") await markRegistrationPaid(id, { provider: "manual" });
+  if (status === "paid") await markRegistrationPaid(id, { provider: "manual", force: true });
   else await setRegistrationStatus(id, status as RegistrationStatus);
 
   return c.json(ok(`Registration marked as ${status}.`));
+});
+
+/** Refund a paid booking through Razorpay from the dashboard. Admin override: skips the 24h rule (e.g. a technical failure on our side). */
+routes.post("/admin/bookings/:id/refund", async (c) => {
+  const reg = await getRegistrationById(str(c.req.param("id"), 64));
+  if (!reg) return c.json(fail("Booking not found."));
+  const res = await refundWorkshopBooking(reg, { actor: "admin" });
+  return c.json(res.ok ? ok(res.message) : fail(res.message));
 });
 
 // ───────────────────────── bookings ─────────────────────────
@@ -448,6 +517,7 @@ routes.get("/admin/bookings", async (c) => {
       status: r.status,
       createdAt: r.createdAt,
       abandoned: r.status === "pending" && now - new Date(r.createdAt).getTime() > holdMs,
+      autoRefundable: isAutoRefundable(r),
     })),
   };
   return c.json(payload);
@@ -599,6 +669,7 @@ routes.get("/admin/training", async (c) => {
       status: b.status,
       goals: b.goals,
       meetingLink: b.meetingLink,
+      autoRefundable: isAutoRefundable(b),
     })),
   };
   return c.json(payload);
@@ -651,6 +722,14 @@ routes.post("/admin/training/bookings/:id/status", async (c) => {
 
   await setTrainingStatus(id, status);
   return c.json(ok(`Booking marked as ${status}.`));
+});
+
+/** Refund a paid training booking through Razorpay from the dashboard (admin override: skips the 24h rule). */
+routes.post("/admin/training/bookings/:id/refund", async (c) => {
+  const booking = await getTrainingBookingById(str(c.req.param("id"), 64));
+  if (!booking) return c.json(fail("Booking not found."));
+  const res = await refundTrainingBooking(booking, { actor: "admin" });
+  return c.json(res.ok ? ok(res.message) : fail(res.message));
 });
 
 routes.post("/admin/training/bookings/:id/meeting-link", async (c) => {

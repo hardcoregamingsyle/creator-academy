@@ -50,6 +50,20 @@ export type TrainingBookingView = {
   /** True when the booking was paid through the demo (no real money) flow. */
   demoPayment: boolean;
   meetingLink: string | null;
+  /** What was refunded (a refunded booking only); null otherwise. */
+  refundAmountPaise: number | null;
+  refundedAt: string | null;
+};
+
+/** What a paid personal-training booking's owner may do: cancel for a refund (rescheduling is by email). */
+export type TrainingChangeOptions = {
+  canRefund: boolean;
+  /** End of the free cancellation window (24h before the session). */
+  deadlineAt: string | null;
+  /** Plain-words summary, or the reason a refund isn't possible. */
+  reason: string;
+  refundAmountPaise: number;
+  refundMethodNote: string;
 };
 
 /** GET /api/pages/training/:code (404 when the code is unknown) */
@@ -60,4 +74,6 @@ export type TrainingBookingPageData = {
   sessionInFuture: boolean;
   contactEmail: string;
   siteUrl: string;
+  /** Null unless the booking is paid. */
+  changeOptions: TrainingChangeOptions | null;
 };

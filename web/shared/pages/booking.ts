@@ -61,6 +61,29 @@ export type BookingView = {
   meetingLink: string | null;
   workshopSlug: string;
   workshop?: Workshop;
+  /** What was refunded (a refunded booking only); null otherwise. */
+  refundAmountPaise: number | null;
+  refundedAt: string | null;
+};
+
+/** What a paid booking's owner may do right now: cancel for a refund and/or move to another date of the same workshop. */
+export type BookingChangeOptions = {
+  canRefund: boolean;
+  canMove: boolean;
+  /** End of the free cancel/move window (24h before the class); null when it doesn't apply (we cancelled the class). */
+  deadlineAt: string | null;
+  /** Plain-words summary, or the reason something isn't possible. */
+  reason: string;
+  /** We cancelled the class: refund or move is possible at any time. */
+  cancelledByUs: boolean;
+  /** Free moves still available (a booking can be moved up to 3 times). */
+  movesLeft: number;
+  /** Exactly what was paid, after any returning-student discount. */
+  refundAmountPaise: number;
+  /** Where the money goes (original payment method in 5-7 business days, or a note for test / manual bookings). */
+  refundMethodNote: string;
+  /** Other bookable dates of the same workshop with a free seat (empty unless `canMove`). Same blanked shape as the public pages. */
+  alternatives: BookingSessionCore[];
 };
 
 /** GET /api/pages/booking/:code (404 JSON for an unknown code). */
@@ -73,7 +96,20 @@ export type BookingPageData = {
   /** "Add to Google Calendar" link; only for paid bookings. */
   googleCalendarUrl: string | null;
   contactEmail: string;
+  /** Null unless the booking is paid. */
+  changeOptions: BookingChangeOptions | null;
 };
+
+/** POST /api/booking/:code/refund and POST /api/training/:code/refund. Failures carry a 4xx/5xx status and a friendly `message`. */
+export type RefundBookingResponse =
+  | { ok: true; message: string; status: "refunded" | "cancelled"; amountPaise: number }
+  | { ok: false; message: string };
+
+/** POST /api/booking/:code/move (JSON body). */
+export type MoveBookingRequest = { sessionId: string };
+export type MoveBookingResponse =
+  | { ok: true; message: string; startsAt: string; code: string }
+  | { ok: false; message: string };
 
 /** GET /api/pages/booking-lookup?code=… — where the "Find my booking" form should go, or what to tell the student. */
 export type BookingLookupResponse = { redirect: string; error?: undefined } | { redirect?: undefined; error: string };

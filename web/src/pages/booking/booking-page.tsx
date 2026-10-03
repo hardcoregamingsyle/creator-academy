@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowRight,
@@ -12,12 +13,13 @@ import {
   Mail,
   Radio,
   Ticket,
+  Undo2,
   XCircle,
 } from "lucide-react";
 import type { PaymentMode } from "@shared/api-types";
 import { formatDateLong, formatINR, formatTimeRange } from "@shared/format";
 import { JOIN_CLOSES_MIN_AFTER_END, JOIN_OPENS_MIN_BEFORE } from "@shared/live";
-import type { BookingPageData, BookingView } from "@shared/pages/booking";
+import type { BookingChangeOptions, BookingPageData, BookingView } from "@shared/pages/booking";
 import { useApi } from "@/lib/useApi";
 import { usePageMeta } from "@/lib/usePageMeta";
 import { useRefetchOnNavigation } from "@/lib/useRefetchOnNavigation";
@@ -27,6 +29,7 @@ import { RetryPayment } from "@/components/booking/retry-payment";
 import { NotFound } from "@/components/not-found";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { ButtonLink, Card, Container, Notice } from "@/components/ui";
+import { ChangeOfPlans, mailtoSubject, type ChangeFlash } from "./change-of-plans";
 
 export function Component() {
   const { code = "" } = useParams();
@@ -38,21 +41,54 @@ export function Component() {
   if (error?.status === 404) return <NotFound />;
   if (error) return <ApiErrorNotice error={error} onRetry={reload} />;
   if (!data) return <PageSkeleton />;
-  return <BookingConfirmation data={data} />;
+  return <BookingConfirmation data={data} reload={reload} />;
 }
 
-function BookingConfirmation({ data }: { data: BookingPageData }) {
-  const { booking: reg, returningDiscountPercent, paymentMode: mode, sessionInFuture, googleCalendarUrl, contactEmail } = data;
+function BookingConfirmation({ data, reload }: { data: BookingPageData; reload: () => void }) {
+  const {
+    booking: reg,
+    returningDiscountPercent,
+    paymentMode: mode,
+    sessionInFuture,
+    googleCalendarUrl,
+    contactEmail,
+    changeOptions,
+  } = data;
   const title = reg.workshop?.title ?? "your workshop";
   const sessionCancelled = reg.sessionStatus === "cancelled";
+  // What the last refund / move said; kept here so it survives the reload that swaps the page into its new state.
+  const [flash, setFlash] = useState<ChangeFlash | null>(null);
 
   return (
     <Container className="py-10 sm:py-14">
       <div className="mx-auto max-w-2xl">
+        {flash && (
+          <Notice tone="success" title={flash.kind === "moved" ? "Booking moved" : "Booking cancelled"} className="mb-8">
+            {flash.message}
+            {flash.kind === "moved" && (
+              <>
+                {" "}
+                Your join link is{" "}
+                <Link to={`/live/${encodeURIComponent(flash.code)}`} className="font-semibold underline underline-offset-2">
+                  /live/{flash.code}
+                </Link>
+                . It opens {JOIN_OPENS_MIN_BEFORE} minutes before the class.
+              </>
+            )}
+          </Notice>
+        )}
+
         {sessionCancelled && (
           <Notice tone="warning" title="This class was cancelled" className="mb-8">
-            {title} on {formatDateLong(reg.sessionStartsAt)} was cancelled. We&apos;ll contact you at {reg.email}{" "}
-            about a refund or a free transfer to another date. Questions? Email{" "}
+            {title} on {formatDateLong(reg.sessionStartsAt)} was cancelled.{" "}
+            {reg.status === "paid" ? (
+              <>You can choose a full refund or a free move to another date in the &ldquo;Change of plans?&rdquo; section below, whenever you like. </>
+            ) : (
+              <>
+                We&apos;ll contact you at {reg.email} about a refund or a free transfer to another date.{" "}
+              </>
+            )}
+            Questions? Email{" "}
             <a href={`mailto:${contactEmail}`} className="font-semibold underline underline-offset-2">
               {contactEmail}
             </a>{" "}
@@ -61,12 +97,25 @@ function BookingConfirmation({ data }: { data: BookingPageData }) {
         )}
 
         {reg.status === "paid" && (
-          <PaidView reg={reg} title={title} gcalUrl={googleCalendarUrl} returningDiscountPercent={returningDiscountPercent} />
+          <PaidView
+            reg={reg}
+            title={title}
+            gcalUrl={googleCalendarUrl}
+            returningDiscountPercent={returningDiscountPercent}
+            changeOptions={changeOptions}
+            contactEmail={contactEmail}
+            onChanged={(f) => {
+              setFlash(f);
+              reload();
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
         )}
         {reg.status === "pending" && (
           <PendingView reg={reg} title={title} mode={mode} sessionInFuture={sessionInFuture} contactEmail={contactEmail} />
         )}
-        {(reg.status === "cancelled" || reg.status === "refunded" || reg.status === "failed") && (
+        {reg.status === "refunded" && <RefundedView reg={reg} title={title} contactEmail={contactEmail} />}
+        {(reg.status === "cancelled" || reg.status === "failed") && (
           <OtherStatusView reg={reg} title={title} contactEmail={contactEmail} />
         )}
       </div>
@@ -81,11 +130,17 @@ function PaidView({
   title,
   gcalUrl,
   returningDiscountPercent,
+  changeOptions,
+  contactEmail,
+  onChanged,
 }: {
   reg: BookingView;
   title: string;
   gcalUrl: string | null;
   returningDiscountPercent: number;
+  changeOptions: BookingChangeOptions | null;
+  contactEmail: string;
+  onChanged: (flash: ChangeFlash) => void;
 }) {
   const w = reg.workshop;
   return (
@@ -236,6 +291,8 @@ function PaidView({
         </ol>
       </section>
 
+      {changeOptions && <ChangeOfPlans reg={reg} options={changeOptions} contactEmail={contactEmail} onChanged={onChanged} />}
+
       <div className="mt-10 flex flex-wrap gap-3 border-t border-line pt-8">
         <ButtonLink href="/schedule" variant="outline">
           Browse other classes <ArrowRight className="size-4" aria-hidden />
@@ -359,9 +416,50 @@ function PendingView({
 
 const statusCopy: Record<string, { title: string; body: string }> = {
   cancelled: { title: "Booking cancelled", body: "This registration was cancelled." },
-  refunded: { title: "Booking refunded", body: "This registration was refunded." },
   failed: { title: "Payment failed", body: "The payment for this registration didn't go through." },
 };
+
+/** A refunded booking: how much, where it goes and when to expect it. No join button: the seat has been released. */
+function RefundedView({ reg, title, contactEmail }: { reg: BookingView; title: string; contactEmail: string }) {
+  return (
+    <div>
+      <div className="mb-8 flex items-start gap-4">
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-sunken text-ink-soft">
+          <Undo2 className="size-6" aria-hidden />
+        </span>
+        <div>
+          <h1 className="text-3xl font-bold sm:text-4xl">Booking refunded</h1>
+          <p className="mt-2 text-muted">
+            {title} on {formatDateLong(reg.sessionStartsAt)}. Registration ID: <span className="font-mono">{reg.code}</span>
+          </p>
+        </div>
+      </div>
+      <Card className="p-6">
+        {reg.demoPayment ? (
+          <p className="text-[15px] text-ink-soft">This was a test booking, so no real money was involved. Your seat has been released.</p>
+        ) : reg.refundAmountPaise ? (
+          <>
+            <p className="font-display text-2xl font-bold text-ink">{formatINR(reg.refundAmountPaise)}</p>
+            <p className="mt-1 text-[15px] text-ink-soft">
+              is on its way back to your original payment method. It usually takes 5-7 business days to show up. Your seat has been
+              released.
+            </p>
+          </>
+        ) : (
+          <p className="text-[15px] text-ink-soft">This registration was refunded and your seat has been released.</p>
+        )}
+      </Card>
+      <div className="mt-6 flex flex-wrap gap-3">
+        <ButtonLink href={mailtoSubject(contactEmail, reg.code, "question about my refund")} variant="outline">
+          <Mail className="size-4" aria-hidden /> Email us
+        </ButtonLink>
+        <ButtonLink href="/schedule" variant="ghost">
+          Browse other classes <ArrowRight className="size-4" aria-hidden />
+        </ButtonLink>
+      </div>
+    </div>
+  );
+}
 
 function OtherStatusView({ reg, title, contactEmail }: { reg: BookingView; title: string; contactEmail: string }) {
   const copy = statusCopy[reg.status] ?? { title: "Booking status", body: "" };

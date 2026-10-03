@@ -28,6 +28,12 @@ export type Registration = {
   attended: boolean;
   createdAt: string;
   paidAt: string | null;
+  /** Self-service refund / move bookkeeping (see _lib/refunds.ts). */
+  refundId: string | null;
+  refundedAt: string | null;
+  refundAmountPaise: number | null;
+  movedCount: number;
+  originalSessionId: string | null;
 };
 
 export type RegistrationWithSession = Registration & {
@@ -58,6 +64,11 @@ type RegRow = {
   attended: number;
   created_at: string;
   paid_at: string | null;
+  refund_id: string | null;
+  refunded_at: string | null;
+  refund_amount_paise: number | null;
+  moved_count: number;
+  original_session_id: string | null;
 };
 
 type RegWithSessionRow = RegRow & {
@@ -88,6 +99,11 @@ function mapReg(r: RegRow): Registration {
     attended: Number(r.attended) === 1,
     createdAt: r.created_at,
     paidAt: r.paid_at,
+    refundId: r.refund_id ?? null,
+    refundedAt: r.refunded_at ?? null,
+    refundAmountPaise: r.refund_amount_paise === null || r.refund_amount_paise === undefined ? null : Number(r.refund_amount_paise),
+    movedCount: Number(r.moved_count ?? 0),
+    originalSessionId: r.original_session_id ?? null,
   };
 }
 
@@ -252,6 +268,11 @@ export async function createPendingRegistration(input: BookingInput): Promise<Bo
     attended: false,
     createdAt: nowIso(),
     paidAt: activePass ? nowIso() : null,
+    refundId: null,
+    refundedAt: null,
+    refundAmountPaise: null,
+    movedCount: 0,
+    originalSessionId: null,
   };
   // Insert only if a seat is still free — checked in the same statement so two
   // people can't both grab the last seat. Pass-covered bookings go straight to
@@ -399,14 +420,18 @@ export async function setRegistrationOrderId(id: string, orderId: string): Promi
 /**
  * Mark a registration as paid. Idempotent: returns `true` only the first time,
  * so confirmation emails are sent exactly once.
+ *
+ * A booking that has been refunded is never flipped back to paid by the payment flows (a late or replayed Razorpay
+ * webhook for the same payment would otherwise hand the seat back for free). Only the admin's explicit manual
+ * "mark paid" passes `force`.
  */
 export async function markRegistrationPaid(
   id: string,
-  payment: { provider: "razorpay" | "demo" | "manual"; paymentId?: string | null },
+  payment: { provider: "razorpay" | "demo" | "manual"; paymentId?: string | null; force?: boolean },
 ): Promise<boolean> {
   const changed = await execute(
     `UPDATE registrations SET status = 'paid', payment_provider = ?, provider_payment_id = ?, paid_at = ?
-     WHERE id = ? AND status != 'paid'`,
+     WHERE id = ? AND status != 'paid'${payment.force ? "" : " AND status != 'refunded' AND refund_id IS NULL"}`,
     [payment.provider, payment.paymentId ?? null, nowIso(), id],
   );
   return changed > 0;
@@ -414,6 +439,15 @@ export async function markRegistrationPaid(
 
 export async function setRegistrationStatus(id: string, status: RegistrationStatus): Promise<void> {
   await execute(`UPDATE registrations SET status = ? WHERE id = ?`, [status, id]);
+}
+
+/** Paid registrations of one session (soonest-booked first), at most `limit` — for the admin's refund-all. */
+export async function listPaidRegistrationIds(sessionId: string, limit: number): Promise<string[]> {
+  const rows = await query<{ id: string }>(
+    `SELECT id FROM registrations WHERE session_id = ? AND status = 'paid' ORDER BY created_at ASC LIMIT ?`,
+    [sessionId, limit],
+  );
+  return rows.map((r) => r.id);
 }
 
 export async function setAttendance(id: string, attended: boolean): Promise<void> {
