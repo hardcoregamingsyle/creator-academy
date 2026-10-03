@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { LIVE_LIMITS, type ClientMsg, type LiveTicketResponse, type MediaPublication } from "@shared/live";
+import { LIVE_LIMITS, type ClientMsg, type LiveTicketResponse, type MediaPublication, type ServerMsg } from "@shared/live";
 import { errorMessage } from "@/lib/api";
 import { fetchTicket, initialRoomState, RoomClient, roomReducer, type RoomSource, type RoomState } from "./room-client";
 
@@ -19,6 +19,10 @@ export type LiveRoomActions = {
   /** Declining also forgets the grant; after accepting, keep it until publishing has started, then clearShareGrant(). */
   respondShare(accept: boolean): boolean;
   publishShare(media: MediaPublication | null): boolean;
+  /** Peer-to-peer signalling (see lib/live/p2p.ts). Students reach only the host; the host names the student in `to`. */
+  sendRtc(msg: Omit<Extract<ClientMsg, { t: "rtc" }>, "t">): boolean;
+  /** Subscribe to relayed signalling frames; returns the unsubscribe function. */
+  onRtc(handler: (msg: Extract<ServerMsg, { t: "rtc" }>) => void): () => void;
   clearShareGrant(): void;
   clearError(): void;
 };
@@ -28,7 +32,7 @@ export type UseLiveRoom = LiveRoomActions & {
   phase: LivePhase;
   /** Readable reason when joining failed (e.g. the 403 "room opens at …" message). */
   joinError: string | null;
-  /** The current ticket response (wsUrl, httpBase, sfuEnabled, ...); refreshed when the socket re-authenticates. */
+  /** The current ticket response (wsUrl, httpBase, iceServers, ...); refreshed when the socket re-authenticates. */
   ticket: LiveTicketResponse | null;
   join(): Promise<void>;
   leave(): void;
@@ -46,6 +50,7 @@ export function useLiveRoom(source: RoomSource): UseLiveRoom {
   const [ticket, setTicket] = useState<LiveTicketResponse | null>(null);
 
   const clientRef = useRef<RoomClient | null>(null);
+  const rtcHandlers = useRef(new Set<(msg: Extract<ServerMsg, { t: "rtc" }>) => void>());
   const joiningRef = useRef(false);
   const genRef = useRef(0);
   const sourceRef = useRef(source);
@@ -78,6 +83,9 @@ export function useLiveRoom(source: RoomSource): UseLiveRoom {
         refreshTicket: () => fetchTicket(sourceRef.current),
         dispatch,
         onTicket: setTicket,
+        onRtc: (msg) => {
+          for (const h of [...rtcHandlers.current]) h(msg);
+        },
       });
       clientRef.current = client;
       setTicket(first);
@@ -128,10 +136,17 @@ export function useLiveRoom(source: RoomSource): UseLiveRoom {
         return ok;
       },
       publishShare: (media) => send({ t: "share:publish", media }),
+      sendRtc: (msg) => send({ t: "rtc", ...msg }),
+      onRtc(handler) {
+        rtcHandlers.current.add(handler);
+        return () => {
+          rtcHandlers.current.delete(handler);
+        };
+      },
       clearShareGrant: () => dispatch({ type: "clear-grant" }),
       clearError: () => dispatch({ type: "error", message: null }),
     };
-  }, []);
+  }, []); // rtcHandlers is a stable ref
 
   return { ...actions, state, phase, joinError, ticket, join, leave };
 }

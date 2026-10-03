@@ -39,7 +39,7 @@ export type RoomState = {
   /** Host only. */
   participants: Participant[];
   studentCount: number;
-  /** Student: a pending screen-share request (the value is the SFU grant to use if they accept). */
+  /** Student: a pending screen-share request (the value is only a marker now; screen sharing is peer-to-peer). */
   shareRequestGrant: string | null;
   /** Student: bumps every time the host withdraws the request / stops the share. */
   shareCancelTick: number;
@@ -164,6 +164,7 @@ function applyServerMsg(state: RoomState, msg: ServerMsg): RoomState {
     }
     case "error":
       return { ...state, error: msg.message };
+    case "rtc": // delivered straight to the signalling subscribers (see RoomClient), never stored
     case "pong":
       return state;
   }
@@ -209,6 +210,12 @@ export function parseServerMsg(data: unknown): ServerMsg | null {
       return typeof v.pid === "string" && (v.media === null || isObj(v.media)) ? (v as ServerMsg) : null;
     case "error":
       return typeof v.message === "string" ? (v as ServerMsg) : null;
+    case "rtc":
+      return typeof v.from === "string" &&
+        (v.stream === "screen" || v.stream === "student-screen") &&
+        (v.kind === "want" || v.kind === "offer" || v.kind === "answer" || v.kind === "ice" || v.kind === "full")
+        ? (v as ServerMsg)
+        : null;
     default:
       return null;
   }
@@ -250,6 +257,8 @@ type ClientOptions = {
   refreshTicket: () => Promise<LiveTicketResponse>;
   dispatch: (action: RoomAction) => void;
   onTicket: (ticket: LiveTicketResponse) => void;
+  /** Peer-to-peer signalling frames, delivered as they arrive (they never go through the reducer). */
+  onRtc: (msg: Extract<ServerMsg, { t: "rtc" }>) => void;
 };
 
 export class RoomClient {
@@ -343,7 +352,9 @@ export class RoomClient {
       if (this.ws !== ws) return;
       this.lastRx = Date.now();
       const msg = parseServerMsg(ev.data);
-      if (msg) this.opts.dispatch({ type: "server", msg });
+      if (!msg) return;
+      if (msg.t === "rtc") this.opts.onRtc(msg);
+      else this.opts.dispatch({ type: "server", msg });
     };
     ws.onerror = () => {
       /* a close event always follows */

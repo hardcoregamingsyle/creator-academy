@@ -12,9 +12,9 @@ import { NotFound } from "@/components/not-found";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { Badge, Button, Card, Eyebrow, Notice } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
-import { canShareScreen, describeMediaError, startScreenShare, type ScreenShare } from "@/lib/live/sfu";
+import { canShareScreen, describeMediaError, iceServersOf, startHostShare, type LocalShare } from "@/lib/live/p2p";
 import { useLiveRoom } from "@/lib/live/use-live-room";
-import { useSubscription } from "@/lib/live/use-subscription";
+import { useReceiver } from "@/lib/live/use-receiver";
 import { useUnread } from "@/lib/live/use-unread";
 import { useApi } from "@/lib/useApi";
 import { usePageMeta } from "@/lib/usePageMeta";
@@ -45,7 +45,7 @@ function Console({ info }: { info: AdminLiveInfo }) {
   const room = useLiveRoom({ kind: "host", sessionId });
   const { state, ticket, join, setPresenter, cancelShare } = room;
   const bearer = ticket?.ticket ?? null;
-  const sfuEnabled = ticket?.sfuEnabled ?? false;
+  const screenEnabled = ticket?.sfuEnabled ?? false;
   const connected = state.connection === "open";
 
   // The host opens the room as soon as the console loads.
@@ -60,8 +60,9 @@ function Console({ info }: { info: AdminLiveInfo }) {
   const [actionError, setActionError] = useState<string | null>(null);
 
   // ── the host's own screen share ──
-  const shareRef = useRef<ScreenShare | null>(null);
-  const [local, setLocal] = useState<ScreenShare | null>(null);
+  const shareRef = useRef<LocalShare | null>(null);
+  const [local, setLocal] = useState<LocalShare | null>(null);
+  const [viewers, setViewers] = useState(0);
   const [starting, setStarting] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [micOn, setMicOn] = useState(true);
@@ -71,8 +72,9 @@ function Console({ info }: { info: AdminLiveInfo }) {
     const share = shareRef.current;
     shareRef.current = null;
     setLocal(null);
+    setViewers(0);
     if (share) {
-      void share.stop();
+      share.stop();
       setPresenter(null);
     }
   }, [setPresenter]);
@@ -82,13 +84,15 @@ function Console({ info }: { info: AdminLiveInfo }) {
     setStarting(true);
     setShareError(null);
     try {
-      const share = await startScreenShare({
-        ticket: bearer,
+      const share = await startHostShare({
+        link: { send: room.sendRtc, onRtc: room.onRtc, iceServers: iceServersOf(ticket) },
         withMic: micOn,
+        onViewers: setViewers,
         onEnded: (reason) => {
-          // The browser's own "Stop sharing" bar, or the media connection dropped.
+          // The browser's own "Stop sharing" bar.
           shareRef.current = null;
           setLocal(null);
+          setViewers(0);
           setPresenter(null);
           if (reason) setShareError(reason);
         },
@@ -127,7 +131,7 @@ function Console({ info }: { info: AdminLiveInfo }) {
     () => () => {
       const share = shareRef.current;
       shareRef.current = null;
-      if (share) void share.stop();
+      if (share) share.stop();
     },
     [],
   );
@@ -162,7 +166,15 @@ function Console({ info }: { info: AdminLiveInfo }) {
   }
 
   // ── a student's screen ──
-  const studentView = useSubscription(state.studentShare?.media ?? null, bearer, sfuEnabled);
+  const studentView = useReceiver({
+    enabled: screenEnabled && state.studentShare !== null,
+    stream: "student-screen",
+    shareKey: state.studentShare?.media.sessionId ?? "",
+    peer: state.studentShare?.pid,
+    sendRtc: room.sendRtc,
+    onRtc: room.onRtc,
+    ticket,
+  });
   const [requested, setRequested] = useState<Record<string, number>>({});
   const prevSharing = useRef<string | null>(null);
   useEffect(() => {
@@ -260,11 +272,6 @@ function Console({ info }: { info: AdminLiveInfo }) {
         </Notice>
       )}
       {state.error && <Notice tone="warning">{state.error}</Notice>}
-      {ticket && !ticket.sfuEnabled && (
-        <Notice tone="info" title="Screen sharing isn't switched on yet">
-          Screen sharing needs the Cloudflare Realtime keys — chat, polls and files already work.
-        </Notice>
-      )}
       {!supported && (
         <Notice tone="warning">This browser can&apos;t share a screen. Open the console in Chrome, Edge or Firefox on a computer to present.</Notice>
       )}
@@ -290,7 +297,7 @@ function Console({ info }: { info: AdminLiveInfo }) {
                 <MonitorOff className="size-4" aria-hidden /> Stop sharing
               </Button>
             ) : (
-              <Button onClick={() => void startShare()} disabled={!supported || !sfuEnabled || !connected || starting || !bearer}>
+              <Button onClick={() => void startShare()} disabled={!supported || !screenEnabled || !connected || starting || !bearer}>
                 <MonitorUp className="size-4" aria-hidden /> {starting ? "Starting…" : "Share screen"}
               </Button>
             )}
@@ -306,6 +313,9 @@ function Console({ info }: { info: AdminLiveInfo }) {
             {local && (
               <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
                 <span className="size-2 animate-rec rounded-full bg-danger" aria-hidden /> Sharing with students
+                <span className="text-xs font-normal text-muted" aria-live="polite">
+                  · {viewers} watching
+                </span>
               </span>
             )}
           </div>
@@ -331,13 +341,10 @@ function Console({ info }: { info: AdminLiveInfo }) {
                   </Button>
                 }
                 placeholder={
-                  studentView.status === "failed" ? (
-                    <>
-                      <p>{studentView.error}</p>
-                      <Button size="sm" variant="light" onClick={studentView.retry}>
-                        Try again
-                      </Button>
-                    </>
+                  studentView.status === "unsupported" ? (
+                    "This browser can't show live video."
+                  ) : studentView.status === "reconnecting" ? (
+                    "Reconnecting to the student's screen…"
                   ) : (
                     "Connecting to the student's screen…"
                   )
@@ -367,7 +374,7 @@ function Console({ info }: { info: AdminLiveInfo }) {
               sharingPid={state.studentShare?.pid ?? null}
               requested={requested}
               responses={state.shareResponses}
-              sfuEnabled={sfuEnabled}
+              screenEnabled={screenEnabled}
               onRequest={requestScreen}
               onCancel={cancelRequest}
             />

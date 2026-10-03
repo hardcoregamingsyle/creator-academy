@@ -9,6 +9,8 @@ import {
   type Participant,
   type Poll,
   type RoomSnapshot,
+  type RtcCandidate,
+  type RtcStream,
   type ServerMsg,
   type SharedFile,
   type TicketClaims,
@@ -26,6 +28,9 @@ const CHUNK_BYTES = 1_500_000; // SQLite rows/blobs are capped at 2 MB
 const RATE_WINDOW_MS = 10_000;
 const RATE_MAX = 20; // messages per socket per window
 const MAX_MESSAGE_CHARS = 32_768;
+/** WebRTC signalling (SDP/ICE) is bursty and has its own, larger bucket and size cap. */
+const RTC_MAX_CHARS = 16_384;
+const RTC_RATE_MAX = 600; // per socket per window: a host answering 30 viewers sends ~30 offers + ~8 candidates each
 const STORED_MESSAGES_MAX = 5_000;
 const DAY_MS = 86_400_000;
 const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
@@ -46,7 +51,8 @@ type PollData = {
   votes: Map<string, number>;
 };
 
-type ShareState = { pid: string; name: string };
+/** `accepted`: the student pressed Accept (only then may they send their screen's signalling). */
+type ShareState = { pid: string; name: string; accepted?: boolean };
 type StudentShare = { pid: string; name: string; media: MediaPublication };
 
 const SCHEMA = [
@@ -99,7 +105,7 @@ function cleanName(raw: string | null): string {
   return name || "file";
 }
 
-/** Validates a client-supplied SFU publication. `undefined` = malformed, `null` = "nothing published". */
+/** Validates a client-supplied media announcement (what is being shared peer-to-peer). `undefined` = malformed, `null` = "nothing published". */
 function cleanMedia(raw: unknown): MediaPublication | null | undefined {
   if (raw === null) return null;
   if (!raw || typeof raw !== "object") return undefined;
@@ -120,6 +126,7 @@ function cleanMedia(raw: unknown): MediaPublication | null | undefined {
 export class LiveRoom extends DurableObject<Env> {
   private sql: SqlStorage;
   private rates = new WeakMap<WebSocket, { start: number; count: number; warned: boolean }>();
+  private rtcRates = new WeakMap<WebSocket, { start: number; count: number; warned: boolean }>();
   private lastAlarmAt = 0;
   private insertedSincePrune = 0;
 
@@ -286,15 +293,23 @@ export class LiveRoom extends DurableObject<Env> {
     if (typeof message !== "string" || message.length > MAX_MESSAGE_CHARS) return;
     const claims = ws.deserializeAttachment() as TicketClaims | null;
     if (!claims) return;
-    if (!this.allowMessage(ws)) return;
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(message);
     } catch {
-      return; // malformed JSON is ignored
+      this.allowMessage(ws); // malformed JSON is ignored, but still counts against the flood limit
+      return;
     }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      this.allowMessage(ws);
+      return;
+    }
+    if ((parsed as { t?: unknown }).t === "rtc") {
+      if (message.length > RTC_MAX_CHARS || !this.allowRtc(ws)) return;
+    } else if (!this.allowMessage(ws)) {
+      return;
+    }
 
     try {
       await this.dispatch(ws, claims, parsed as Record<string, unknown>);
@@ -324,6 +339,7 @@ export class LiveRoom extends DurableObject<Env> {
 
     // A student's screen share dies with their last open tab: stop showing it to the host.
     if (this.openSockets(claims.pid, ws).length === 0) {
+      this.dropScreenViewer(claims.pid);
       const pending = this.getJson<ShareState>("shareReq");
       const active = this.getJson<StudentShare>("studentShare");
       if (pending?.pid === claims.pid || active?.pid === claims.pid) {
@@ -405,10 +421,15 @@ export class LiveRoom extends DurableObject<Env> {
         if (!isHost) return deny();
         const media = cleanMedia(m.media);
         if (media === undefined) return this.send(ws, { t: "error", message: "Invalid presentation details." });
+        // A withdrawn or replaced share frees every video slot (viewers send a fresh `want` for the new one).
+        if (!media || media.sessionId !== this.getJson<MediaPublication>("presenter")?.sessionId) this.setMeta("wantScreen", null);
         this.setMeta("presenter", media ? JSON.stringify(media) : null);
         this.broadcast(this.openSockets(), { t: "presenter", media });
         return;
       }
+
+      case "rtc":
+        return this.onRtc(ws, claims, m);
 
       case "share:request":
         if (!isHost) return deny();
@@ -422,7 +443,7 @@ export class LiveRoom extends DurableObject<Env> {
         if (isHost) return deny();
         const pending = this.getJson<ShareState>("shareReq");
         if (pending?.pid !== claims.pid || typeof m.accept !== "boolean") return;
-        if (!m.accept) this.setMeta("shareReq", null);
+        this.setMeta("shareReq", m.accept ? JSON.stringify({ ...pending, accepted: true } satisfies ShareState) : null);
         this.broadcast(this.openSockets("host"), { t: "share:response", pid: claims.pid, name: claims.name, accept: m.accept });
         return;
       }
@@ -445,6 +466,85 @@ export class LiveRoom extends DurableObject<Env> {
       default:
         return; // unknown message types are ignored
     }
+  }
+
+  // ───────────────────────── WebRTC signalling relay ─────────────────────────
+
+  /** Pids of the students currently pulling the host's video (persisted so a hibernated room keeps counting). */
+  private screenViewers(): string[] {
+    return this.getJson<string[]>("wantScreen") ?? [];
+  }
+
+  private dropScreenViewer(pid: string): void {
+    const viewers = this.screenViewers();
+    if (viewers.includes(pid)) this.setMeta("wantScreen", viewers.length > 1 ? JSON.stringify(viewers.filter((v) => v !== pid)) : null);
+  }
+
+  /** Validates a candidate from the wire. `undefined` = malformed; `null` = end of candidates. */
+  private cleanCandidate(raw: unknown): RtcCandidate | null | undefined {
+    if (raw === null) return null;
+    if (!raw || typeof raw !== "object") return undefined;
+    const { candidate, sdpMid, sdpMLineIndex, usernameFragment } = raw as Record<string, unknown>;
+    if (typeof candidate !== "string" || candidate.length > 2_000) return undefined;
+    const out: RtcCandidate = { candidate };
+    if (typeof sdpMid === "string" && sdpMid.length <= 64) out.sdpMid = sdpMid;
+    else if (sdpMid === null) out.sdpMid = null;
+    if (typeof sdpMLineIndex === "number" && Number.isInteger(sdpMLineIndex) && sdpMLineIndex >= 0 && sdpMLineIndex < 64) out.sdpMLineIndex = sdpMLineIndex;
+    else if (sdpMLineIndex === null) out.sdpMLineIndex = null;
+    if (typeof usernameFragment === "string" && usernameFragment.length <= 64) out.usernameFragment = usernameFragment;
+    else if (usernameFragment === null) out.usernameFragment = null;
+    return out;
+  }
+
+  /**
+   * Blind P2P signalling relay: student to host only (the server stamps `from`, any client `to` is ignored) and host to
+   * one connected student. Student to student does not exist. The message is rebuilt from validated fields.
+   */
+  private onRtc(ws: WebSocket, claims: TicketClaims, m: Record<string, unknown>): void {
+    const stream = m.stream as RtcStream;
+    const kind = m.kind;
+    if (stream !== "screen" && stream !== "student-screen") return;
+    if (kind !== "want" && kind !== "offer" && kind !== "answer" && kind !== "ice") return;
+
+    const out: Extract<ServerMsg, { t: "rtc" }> = { t: "rtc", from: claims.pid, stream, kind };
+    if (kind === "offer" || kind === "answer") {
+      if (typeof m.sdp !== "string" || m.sdp.length === 0 || m.sdp.length > RTC_MAX_CHARS - 512) return;
+      out.sdp = m.sdp;
+    } else if (kind === "ice") {
+      const candidate = this.cleanCandidate(m.candidate);
+      if (candidate === undefined) return;
+      out.candidate = candidate;
+    }
+
+    if (claims.role === "host") {
+      const to = typeof m.to === "string" ? m.to : "";
+      const targets = this.openSockets(to).filter((s) => (s.deserializeAttachment() as TicketClaims | null)?.role === "student");
+      if (!to || targets.length === 0) return;
+      this.broadcast(targets, out);
+      return;
+    }
+
+    // Student: only toward the host, and only for things that are actually going on.
+    if (stream === "screen") {
+      if (kind !== "want" && kind !== "answer" && kind !== "ice") return; // students are never senders of "screen"
+      if (!this.getJson<MediaPublication>("presenter")) return;
+      if (kind === "want") {
+        const viewers = this.screenViewers();
+        if (!viewers.includes(claims.pid)) {
+          if (viewers.length >= LIVE_LIMITS.maxVideoViewers) {
+            this.send(ws, { t: "rtc", from: "host", stream: "screen", kind: "full" });
+            return;
+          }
+          this.setMeta("wantScreen", JSON.stringify([...viewers, claims.pid]));
+        }
+      }
+    } else {
+      if (kind !== "want" && kind !== "offer" && kind !== "ice") return; // the host is the only viewer of "student-screen"
+      const req = this.getJson<ShareState>("shareReq");
+      const active = this.getJson<StudentShare>("studentShare");
+      if (!((req?.pid === claims.pid && req.accepted) || active?.pid === claims.pid)) return;
+    }
+    this.broadcast(this.openSockets("host"), out);
   }
 
   private onChat(ws: WebSocket, claims: TicketClaims, m: Record<string, unknown>): void {
@@ -493,6 +593,7 @@ export class LiveRoom extends DurableObject<Env> {
       this.setMeta("endedAt", String(Date.now()));
       // Nothing keeps being presented after the class: withdraw the host's media and any student share.
       this.setMeta("presenter", null);
+      this.setMeta("wantScreen", null);
       const pending = this.getJson<ShareState>("shareReq");
       const active = this.getJson<StudentShare>("studentShare");
       this.setMeta("shareReq", null);
@@ -750,13 +851,22 @@ export class LiveRoom extends DurableObject<Env> {
 
   /** Per-socket flood control: at most RATE_MAX messages per window; the rest are dropped (one warning per window). */
   private allowMessage(ws: WebSocket): boolean {
+    return this.allow(this.rates, ws, RATE_MAX);
+  }
+
+  /** Signalling has a bucket of its own so ICE trickle is not throttled by (nor does it eat into) the chat limit. */
+  private allowRtc(ws: WebSocket): boolean {
+    return this.allow(this.rtcRates, ws, RTC_RATE_MAX);
+  }
+
+  private allow(buckets: WeakMap<WebSocket, { start: number; count: number; warned: boolean }>, ws: WebSocket, max: number): boolean {
     const now = Date.now();
-    let r = this.rates.get(ws);
+    let r = buckets.get(ws);
     if (!r || now - r.start >= RATE_WINDOW_MS) {
       r = { start: now, count: 0, warned: false };
-      this.rates.set(ws, r);
+      buckets.set(ws, r);
     }
-    if (++r.count <= RATE_MAX) return true;
+    if (++r.count <= max) return true;
     if (!r.warned) {
       r.warned = true;
       this.send(ws, { t: "error", message: "You are sending messages too fast. Please slow down." });

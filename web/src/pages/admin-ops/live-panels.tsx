@@ -144,7 +144,7 @@ export function PeoplePanel({
   sharingPid,
   requested,
   responses,
-  sfuEnabled,
+  screenEnabled,
   onRequest,
   onCancel,
 }: {
@@ -154,7 +154,7 @@ export function PeoplePanel({
   /** pid -> time the request was sent. */
   requested: Record<string, number>;
   responses: Record<string, ShareResponse>;
-  sfuEnabled: boolean;
+  screenEnabled: boolean;
   onRequest: (pid: string) => void;
   onCancel: (pid: string) => void;
 }) {
@@ -170,7 +170,6 @@ export function PeoplePanel({
       <p className="mb-2 text-xs text-muted">
         {onlineCount} online · {sorted.length - onlineCount} offline
       </p>
-      {!sfuEnabled && <p className="mb-2 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning">Screen requests need the Cloudflare Realtime keys.</p>}
       <ul className="divide-y divide-line">
         {sorted.map((p) => {
           const asked = requested[p.pid];
@@ -198,7 +197,7 @@ export function PeoplePanel({
                 ) : answered && !answered.accept ? (
                   <>
                     <Badge tone="danger">Declined</Badge>
-                    {p.online && sfuEnabled && (
+                    {p.online && screenEnabled && (
                       <Button size="sm" variant="ghost" onClick={() => onRequest(p.pid)}>
                         Ask again
                       </Button>
@@ -212,7 +211,7 @@ export function PeoplePanel({
                     </Button>
                   </>
                 ) : p.online ? (
-                  <Button size="sm" variant="outline" disabled={!sfuEnabled} onClick={() => onRequest(p.pid)} aria-label={`Request ${p.name}'s screen`}>
+                  <Button size="sm" variant="outline" disabled={!screenEnabled} onClick={() => onRequest(p.pid)} aria-label={`Request ${p.name}'s screen`}>
                     Request screen
                   </Button>
                 ) : null}

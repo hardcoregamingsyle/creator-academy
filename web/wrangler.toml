@@ -18,5 +18,8 @@ CONTACT_EMAIL = "createva28@gmail.com"
 #   LIVE_SECRET        secret: signs class tickets; must equal LIVE_SECRET on the createva-live Worker
 #                      (falls back to SESSION_SECRET when unset, but then set SESSION_SECRET on the Worker too)
 #   CRON_SECRET        secret: Bearer token for POST /api/internal/reminders; must equal CRON_SECRET on the Worker
-#   CF_SFU_APP_ID      secret: Cloudflare Realtime SFU app id    } screen sharing stays hidden in the UI
-#   CF_SFU_APP_SECRET  secret: Cloudflare Realtime SFU app secret } until both are set
+#   Screen sharing is peer-to-peer WebRTC (public STUN, no keys needed). OPTIONAL, for networks that block direct
+#   connections, add a TURN relay (any provider, e.g. coturn or metered.ca):
+#   TURN_URLS          var: comma-separated, e.g. turn:turn.example.com:3478,turns:turn.example.com:443?transport=tcp
+#   TURN_USERNAME      secret: TURN username
+#   TURN_CREDENTIAL    secret: TURN password

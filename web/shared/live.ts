@@ -7,8 +7,9 @@
  *  - One Durable Object ("LiveRoom", in the createva-live Worker) per class
  *    session: WebSocket hub for chat / polls / presence / screen-share
  *    signalling, plus file storage (SQLite). Room id = class_sessions.id.
- *  - Audio/video travels through Cloudflare Realtime SFU. The SFU secret never
- *    reaches the browser: the SPA calls the Pages API's /api/live/sfu/* proxy.
+ *  - Audio/video is peer-to-peer WebRTC (no SFU, no paid service): the sender's browser makes one RTCPeerConnection
+ *    per viewer, and the room only relays the SDP/ICE signalling (ClientMsg/ServerMsg "rtc"). The host sends its screen
+ *    to students; a student sends their screen only to the host. STUN only by default; TURN optional via ticket.iceServers.
  *  - Auth = signed tickets (HMAC-SHA256, secret LIVE_SECRET shared by Pages and
  *    the Worker). The Pages API mints them: students get one for a paid booking
  *    code, the admin cookie gets a host ticket.
@@ -98,6 +99,8 @@ export const LIVE_LIMITS = {
   historyMessages: 200,
   /** Hard cap on simultaneous student sockets per room. */
   maxStudents: 300,
+  /** Max students that can pull the host's video at once (host upload limit); more can still use chat/polls/files. */
+  maxVideoViewers: 30,
   /** Rooms are wiped this long after the class ends (DO alarm). */
   roomRetentionDays: 7,
 } as const;
@@ -148,7 +151,7 @@ export type SharedFile = {
 
 /** What the SFU publisher is currently sending: enough for others to pull it. */
 export type MediaPublication = {
-  /** Cloudflare SFU session id of the publisher. */
+  /** Random id of this share (new for every start of sharing). Not an SFU session any more. */
   sessionId: string;
   tracks: { name: string; kind: "video" | "audio"; label: "screen" | "screen-audio" | "mic" }[];
 };
@@ -178,6 +181,14 @@ export type RoomSnapshot = {
 // ───────────────────────── WebSocket protocol ─────────────────────────
 // Connect: GET <wsUrl>?t=<ticket>  (upgrade). One JSON object per message.
 
+/**
+ * Peer-to-peer signalling. The VIEWER sends "want" for a stream, the SENDER answers with an "offer", the viewer replies
+ * "answer", both trickle "ice" (candidate null = end of candidates). "screen" = host to students, "student-screen" = student to host.
+ * The room relays these blindly between the host and one student; student to student is impossible.
+ */
+export type RtcStream = "screen" | "student-screen";
+export type RtcCandidate = { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null; usernameFragment?: string | null };
+
 /** Client → server. */
 export type ClientMsg =
   | { t: "chat"; text: string; /** host only: omit to broadcast */ to?: string }
@@ -190,6 +201,7 @@ export type ClientMsg =
   | { t: "share:cancel"; to: string } // host withdraws the request / stops that student's share
   | { t: "share:respond"; accept: boolean } // student answers the pending request
   | { t: "share:publish"; media: MediaPublication | null } // student: announce / withdraw their SFU tracks (after accepting)
+  | { t: "rtc"; to?: string; stream: RtcStream; kind: "want" | "offer" | "answer" | "ice"; sdp?: string; candidate?: RtcCandidate | null } // P2P signalling: students to host only; host to one student (`to`)
   | { t: "ping" };
 
 /** Server → client. */
@@ -205,6 +217,7 @@ export type ServerMsg =
   | { t: "share:cancelled" } // to student: request withdrawn / share stopped
   | { t: "share:response"; pid: string; name: string; accept: boolean } // to host
   | { t: "share:media"; pid: string; name: string; media: MediaPublication | null } // to host
+  | { t: "rtc"; from: string; stream: RtcStream; kind: "want" | "offer" | "answer" | "ice" | "full"; sdp?: string; candidate?: RtcCandidate | null } // relayed signalling; `from` = sender pid; "full" = host has no video slot left
   | { t: "error"; message: string }
   | { t: "pong" };
 
@@ -241,8 +254,10 @@ export type LiveTicketResponse = {
   wsUrl: string;
   /** https:// origin of the Worker for uploads/downloads. */
   httpBase: string;
-  /** False until CF_SFU_APP_ID / CF_SFU_APP_SECRET are configured: the UI must then hide screen sharing and explain it. */
+  /** Screen sharing available. Always true now that sharing is peer-to-peer (needs no keys); kept so the UI can hide it if ever disabled. */
   sfuEnabled: boolean;
+  /** ICE servers for RTCPeerConnection: public STUN by default, plus TURN when TURN_URLS is configured. */
+  iceServers: { urls: string | string[]; username?: string; credential?: string }[];
   role: LiveRole;
 };
 
@@ -250,14 +265,8 @@ export type LiveTicketResponse = {
  *  POST /api/admin/live/:sessionId/ticket → LiveTicketResponse   (admin cookie)
  *  POST /api/admin/live/:sessionId/start | /end → { ok: true }    (records live_started_at / live_ended_at on class_sessions) */
 
-// Cloudflare SFU proxy. Auth: `Authorization: Bearer <ticket>` (host ticket or student share-grant for publishing; any
-// valid ticket for pulling remote tracks). Bodies/responses are passed through verbatim to
-// https://rtc.live.cloudflare.com/v1/apps/<APP_ID>/…  — see Cloudflare Realtime "HTTPS API".
-//   POST /api/live/sfu/session                      → { sessionId }                (creates an SFU session; any valid ticket)
-//   POST /api/live/sfu/:sessionId/tracks            → SFU response                 (local tracks only if role=host or ticket.share; remote always allowed)
-//   PUT  /api/live/sfu/:sessionId/renegotiate       → SFU response
-//   PUT  /api/live/sfu/:sessionId/close             → SFU response                 (publisher closes its tracks)
-// Track naming used by the SPA: "screen", "screen-audio", "mic" (names are unique per SFU session).
+// (The Cloudflare SFU proxy endpoints were removed: media is peer-to-peer, see the header.)
+// Track names inside a MediaPublication: "screen", "screen-audio", "mic".
 
 // Reminder cron (called by the Worker's scheduled() every 10 minutes):
 //   POST /api/internal/reminders   Authorization: Bearer <CRON_SECRET>

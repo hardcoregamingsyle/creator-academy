@@ -14,9 +14,9 @@ import { PageSkeleton } from "@/components/page-skeleton";
 import { Badge, Button, ButtonLink, Card, Container, Eyebrow, Notice } from "@/components/ui";
 import { usePageMeta } from "@/lib/usePageMeta";
 import { useApi } from "@/lib/useApi";
-import { canShareScreen, describeMediaError, startStudentShare, type ScreenShare } from "@/lib/live/sfu";
+import { canReceiveVideo, canShareScreen, describeMediaError, iceServersOf, startStudentShare, type LocalShare } from "@/lib/live/p2p";
 import { useLiveRoom, type UseLiveRoom } from "@/lib/live/use-live-room";
-import { useSubscription } from "@/lib/live/use-subscription";
+import { useReceiver } from "@/lib/live/use-receiver";
 import { useUnread } from "@/lib/live/use-unread";
 
 type Tab = "chat" | "polls" | "files";
@@ -191,11 +191,19 @@ function Room({ info, room }: { info: LiveJoinInfo; room: UseLiveRoom }) {
   const { state, ticket } = room;
   const { publishShare, respondShare, clearShareGrant, clearError } = room;
   const bearer = ticket?.ticket ?? null;
-  const sfuEnabled = ticket?.sfuEnabled ?? false;
+  const videoEnabled = ticket?.sfuEnabled ?? false;
   const selfPid = state.you?.pid ?? "";
 
   const [tab, setTab] = useState<Tab>("chat");
-  const presenter = useSubscription(state.presenter, bearer, sfuEnabled);
+  // The host's screen: pulled peer-to-peer for as long as the host is presenting (a new share = a new connection).
+  const presenter = useReceiver({
+    enabled: videoEnabled && state.presenter !== null && state.connection !== "closed",
+    stream: "screen",
+    shareKey: state.presenter?.sessionId ?? "",
+    sendRtc: room.sendRtc,
+    onRtc: room.onRtc,
+    ticket,
+  });
 
   // ── unread badges ──
   const unread = useUnread(
@@ -216,12 +224,12 @@ function Room({ info, room }: { info: LiveJoinInfo; room: UseLiveRoom }) {
   }, [state.error, clearError]);
 
   // ── the host asking this student to share their screen ──
-  const shareRef = useRef<ScreenShare | null>(null);
-  const [sharing, setSharing] = useState<ScreenShare | null>(null);
+  const shareRef = useRef<LocalShare | null>(null);
+  const [sharing, setSharing] = useState<LocalShare | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
-  const canShare = canShareScreen() && sfuEnabled;
+  const canShare = canShareScreen() && videoEnabled;
 
   const endLocalShare = useCallback(
     (tellRoom: boolean) => {
@@ -236,15 +244,14 @@ function Room({ info, room }: { info: LiveJoinInfo; room: UseLiveRoom }) {
   );
 
   async function acceptShare() {
-    const grant = state.shareRequestGrant;
-    if (!grant || shareBusy || shareRef.current) return;
+    if (!state.shareRequestGrant || shareBusy || shareRef.current) return;
     setShareBusy(true);
     setShareError(null);
     setShareNote(null);
     let responded = false;
     try {
       const share = await startStudentShare({
-        ticket: grant,
+        link: { send: room.sendRtc, onRtc: room.onRtc, iceServers: iceServersOf(ticket) },
         // Called once the screen is captured (so cancelling the browser prompt does not count as accepting).
         beforePublish: () => {
           responded = true;
@@ -315,17 +322,20 @@ function Room({ info, room }: { info: LiveJoinInfo; room: UseLiveRoom }) {
   if (state.ended) placeholder = "This class has ended.";
   else if (!state.ready) placeholder = <><Loader2 className="size-6 animate-spin" aria-hidden /> Connecting to the class…</>;
   else if (!state.live && !state.presenter) placeholder = "Waiting for the host to start…";
-  else if (presenter.status === "failed") {
+  else if (state.presenter && !videoEnabled) placeholder = "Live video isn't switched on for this class. Chat, polls and files still work.";
+  else if (state.presenter && !canReceiveVideo()) placeholder = "This browser can't show live video. Chat, polls and files still work.";
+  else if (state.presenter && presenter.status === "full") {
     placeholder = (
       <>
-        <p>{presenter.error ?? "We lost the connection to the host's screen."}</p>
+        <p>Video is full right now — chat still works</p>
         <Button size="sm" variant="light" onClick={presenter.retry}>
           Try again
         </Button>
       </>
     );
-  } else if (state.presenter && !sfuEnabled) placeholder = "Live video isn't switched on for this class. Chat, polls and files still work.";
-  else if (state.presenter) placeholder = <><Loader2 className="size-6 animate-spin" aria-hidden /> Connecting to the host&apos;s screen…</>;
+  } else if (state.presenter && presenter.status === "reconnecting") {
+    placeholder = <><Loader2 className="size-6 animate-spin" aria-hidden /> Reconnecting to the host&apos;s screen…</>;
+  } else if (state.presenter) placeholder = <><Loader2 className="size-6 animate-spin" aria-hidden /> Connecting to the host&apos;s screen…</>;
   else placeholder = "Host is not sharing right now";
 
   const tabs = [
@@ -412,7 +422,7 @@ function Room({ info, room }: { info: LiveJoinInfo; room: UseLiveRoom }) {
               ) : (
                 <>
                   <p className="mt-1 text-sm text-ink-soft">
-                    {sfuEnabled
+                    {videoEnabled
                       ? "Screen sharing isn't supported on this device — it needs a computer with Chrome, Edge or Firefox. You can tell the host in the chat."
                       : "Screen sharing isn't switched on for this class yet. You can tell the host in the chat."}
                   </p>

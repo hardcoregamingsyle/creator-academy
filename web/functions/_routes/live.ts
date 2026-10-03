@@ -1,12 +1,10 @@
 import crypto from "node:crypto";
 import { Hono, type Context } from "hono";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   JOIN_CLOSES_MIN_AFTER_END,
   JOIN_OPENS_MIN_BEFORE,
   TICKET_TTL_SECONDS,
   signTicket,
-  verifyTicket,
   type AdminLiveInfo,
   type LiveJoinInfo,
   type LiveStatus,
@@ -24,14 +22,11 @@ import { fail, notFound } from "./util";
 
 /**
  * Live classes, Pages API half (see shared/live.ts for the contract): join info, tickets for the room Worker,
- * the Cloudflare Realtime SFU proxy, the host's start/end, and the 24h reminder cron. Everything under /admin
+ * the host's start/end, and the 24h reminder cron. Everything under /admin
  * is already behind the admin guard in app.ts; /internal/* is called by the room Worker's cron with CRON_SECRET.
  */
 export const routes = new Hono<AppEnv>();
 
-const SFU_BASE = "https://rtc.live.cloudflare.com/v1/apps";
-const SFU_SESSION_ID = /^[A-Za-z0-9-]{8,64}$/;
-const SFU_NOT_SET_UP = "Screen sharing is not set up yet.";
 const LIVE_NOT_SET_UP = "Live classes are not set up yet.";
 /** Students on one network (a college lab) share an IP, so this is modest but not tight. */
 const TICKET_LIMIT = { scope: "live-ticket", max: 60, windowSeconds: 60 };
@@ -65,10 +60,15 @@ function liveEndpoints(room: string): { wsUrl: string; httpBase: string } | null
   return { wsUrl: `${secure ? "wss" : "ws"}://${u.host}${base}/${room}`, httpBase: `${secure ? "https" : "http"}://${u.host}` };
 }
 
-function sfuConfig(): { appId: string; secret: string } | null {
-  const appId = process.env.CF_SFU_APP_ID;
-  const secret = process.env.CF_SFU_APP_SECRET;
-  return appId && secret ? { appId, secret } : null;
+/**
+ * ICE servers handed to every client: free public STUN, plus an optional TURN relay (TURN_URLS comma-separated,
+ * TURN_USERNAME / TURN_CREDENTIAL) for networks where a direct peer-to-peer path is impossible.
+ */
+function iceServers(): LiveTicketResponse["iceServers"] {
+  const servers: LiveTicketResponse["iceServers"] = [{ urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] }];
+  const turn = String(process.env.TURN_URLS ?? "").split(",").map((u: string) => u.trim()).filter(Boolean);
+  if (turn.length) servers.push({ urls: turn, username: process.env.TURN_USERNAME ?? "", credential: process.env.TURN_CREDENTIAL ?? "" });
+  return servers;
 }
 
 function bearer(header: string | undefined): string | null {
@@ -157,7 +157,8 @@ async function mintTicket(
     ticket,
     wsUrl: endpoints.wsUrl,
     httpBase: endpoints.httpBase,
-    sfuEnabled: sfuConfig() !== null,
+    sfuEnabled: true,
+    iceServers: iceServers(),
     role: claims.role,
   };
   return c.json(body);
@@ -252,93 +253,6 @@ routes.post("/admin/live/:sessionId/start", async (c) => {
 routes.post("/admin/live/:sessionId/end", async (c) => {
   const changed = await execute(`UPDATE class_sessions SET live_ended_at = ? WHERE id = ?`, [nowIso(), c.req.param("sessionId")]);
   return changed ? c.json({ ok: true }) : notFound(c);
-});
-
-// ───────────────────────── Cloudflare Realtime SFU proxy ─────────────────────────
-// The SFU app secret stays here. Auth is the room ticket; only the host (or a student holding a share grant) may
-// publish. Not covered by the per-IP booking limits (a class of students sits behind one NAT).
-
-type SfuAuth = { claims: TicketClaims; appId: string; secret: string; canPublish: boolean };
-
-async function authorizeSfu(c: Context<AppEnv>): Promise<SfuAuth | Response> {
-  const secret = liveSecret();
-  if (!secret) return c.json(fail(LIVE_NOT_SET_UP), 503);
-  const claims = await verifyTicket(bearer(c.req.header("authorization")), secret);
-  if (!claims) return c.json(fail("Your class ticket is missing or has expired. Please reload the page."), 401);
-  const sfu = sfuConfig();
-  if (!sfu) return c.json(fail(SFU_NOT_SET_UP), 503);
-  return { claims, ...sfu, canPublish: claims.role === "host" || claims.share === true };
-}
-
-async function forwardSfu(c: Context<AppEnv>, sfu: SfuAuth, method: "POST" | "PUT", path: string, body?: string): Promise<Response> {
-  let res: Response;
-  try {
-    res = await fetch(`${SFU_BASE}/${encodeURIComponent(sfu.appId)}${path}`, {
-      method,
-      headers: { Authorization: `Bearer ${sfu.secret}`, "Content-Type": "application/json" },
-      body,
-      signal: AbortSignal.timeout(15_000),
-    });
-  } catch (err) {
-    console.error("[live] sfu request failed:", err);
-    return c.json(fail("The video service is not reachable right now."), 502);
-  }
-  if (res.status === 204 || res.status === 205 || res.status === 304) return c.body(null, res.status as 204);
-  return c.body(await res.text(), res.status as ContentfulStatusCode, {
-    "Content-Type": res.headers.get("content-type") ?? "application/json",
-  });
-}
-
-/** The :sessionId path segment is spliced into an upstream URL, so it must be a plain SFU session id. */
-function sfuSessionParam(c: Context<AppEnv>): string | null {
-  const id = c.req.param("sessionId") ?? "";
-  return SFU_SESSION_ID.test(id) ? id : null;
-}
-
-routes.post("/live/sfu/session", async (c) => {
-  const sfu = await authorizeSfu(c);
-  if (sfu instanceof Response) return sfu;
-  return forwardSfu(c, sfu, "POST", "/sessions/new");
-});
-
-routes.post("/live/sfu/:sessionId/tracks", async (c) => {
-  const sfu = await authorizeSfu(c);
-  if (sfu instanceof Response) return sfu;
-  const id = sfuSessionParam(c);
-  if (!id) return c.json(fail("Invalid session."), 400);
-
-  const raw = await c.req.text();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return c.json(fail("Invalid request."), 400);
-  }
-  const tracks = (parsed as { tracks?: unknown } | null)?.tracks;
-  if (!Array.isArray(tracks)) return c.json(fail("Invalid request."), 400);
-  // Pulling someone else's tracks is open to every ticket; anything that is not clearly "remote" is publishing.
-  const publishing = tracks.some((t) => (t as { location?: unknown } | null)?.location !== "remote");
-  if (publishing && !sfu.canPublish) return c.json(fail("You are not allowed to share your screen or audio."), 403);
-  return forwardSfu(c, sfu, "POST", `/sessions/${id}/tracks/new`, raw);
-});
-
-routes.put("/live/sfu/:sessionId/renegotiate", async (c) => {
-  const sfu = await authorizeSfu(c);
-  if (sfu instanceof Response) return sfu;
-  const id = sfuSessionParam(c);
-  if (!id) return c.json(fail("Invalid session."), 400);
-  return forwardSfu(c, sfu, "PUT", `/sessions/${id}/renegotiate`, await c.req.text());
-});
-
-routes.put("/live/sfu/:sessionId/close", async (c) => {
-  const sfu = await authorizeSfu(c);
-  if (sfu instanceof Response) return sfu;
-  // Closing tracks is a publisher's job; viewers just drop their session. Without this check any student
-  // (the host's SFU session id is broadcast to them) could stop the host's screen for everyone.
-  if (!sfu.canPublish) return c.json(fail("Not allowed."), 403);
-  const id = sfuSessionParam(c);
-  if (!id) return c.json(fail("Invalid session."), 400);
-  return forwardSfu(c, sfu, "PUT", `/sessions/${id}/tracks/close`, await c.req.text());
 });
 
 // ───────────────────────── 24h reminder cron ─────────────────────────
