@@ -33,6 +33,7 @@ export async function createRazorpayOrder(input: {
   receipt: string;
   notes: Record<string, string>;
 }): Promise<RazorpayOrder> {
+  if (!Number.isInteger(input.amountPaise) || input.amountPaise < 100) throw new Error("Razorpay orders need an amount of at least 100 paise.");
   const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString("base64");
   const res = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
